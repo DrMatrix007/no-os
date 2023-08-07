@@ -13,7 +13,6 @@ use uefi::{
     table::{Boot, SystemTable},
     CStr16, Handle, Status,
 };
-use uefi_services::println;
 
 fn load_file(
     path: &CStr16,
@@ -46,11 +45,11 @@ fn load_file(
 }
 
 #[entry]
-fn main(_image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
+fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     uefi_services::init(&mut system_table).unwrap();
     system_table.stdout().clear().unwrap();
 
-    let mut kernel = load_file(cstr16!("kernel.no"), &system_table, None).unwrap();
+    let mut kernel = load_file(cstr16!("no_kernel.no"), &system_table, None).unwrap();
     kernel.set_position(0xFFFFFFFFFFFFFFFF).unwrap();
     let size = kernel.get_position().unwrap() as usize;
     let mut data = Vec::with_capacity(size + 1);
@@ -62,7 +61,7 @@ fn main(_image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     let loaded = system_table
         .boot_services()
         .load_image(
-            _image_handle,
+            image_handle,
             uefi::table::boot::LoadImageSource::FromBuffer {
                 buffer: &data,
                 file_path: None,
@@ -71,6 +70,6 @@ fn main(_image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
         .unwrap();
     system_table.boot_services().start_image(loaded).unwrap();
 
-    let res = system_table.exit_boot_services();
+    let _ = system_table.exit_boot_services();
     Status::SUCCESS
 }

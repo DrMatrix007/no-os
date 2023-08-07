@@ -1,19 +1,17 @@
 #![no_std]
 #![no_main]
 
-use core::panic::PanicInfo;
+extern crate alloc;
 
+use alloc::vec::Vec;
 use uefi::{
     cstr16, entry,
-    proto::{
-        loaded_image::{self, LoadedImage},
-        media::{
-            file::{Directory, File, FileAttribute, RegularFile},
-            fs::SimpleFileSystem,
-        },
+    proto::media::{
+        file::{Directory, File, FileAttribute, RegularFile},
+        fs::SimpleFileSystem,
     },
     table::{Boot, SystemTable},
-    CStr16, Error, Handle, Status,
+    CStr16, Handle, Status,
 };
 use uefi_services::println;
 
@@ -52,11 +50,27 @@ fn main(_image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     uefi_services::init(&mut system_table).unwrap();
     system_table.stdout().clear().unwrap();
 
-    let kernel = load_file(cstr16!("kernel.no"), &system_table, None).unwrap();
+    let mut kernel = load_file(cstr16!("kernel.no"), &system_table, None).unwrap();
+    kernel.set_position(0xFFFFFFFFFFFFFFFF).unwrap();
+    let size = kernel.get_position().unwrap() as usize;
+    let mut data = Vec::with_capacity(size + 1);
+    data.resize(size + 1 as usize, 0);
 
-    
+    kernel.read(data.as_mut()).unwrap();
 
-    println!("Hello world!");
-    system_table.boot_services().stall(10_000_000);
+    // let elf = Elf::parse(kernel.);
+    let loaded = system_table
+        .boot_services()
+        .load_image(
+            _image_handle,
+            uefi::table::boot::LoadImageSource::FromBuffer {
+                buffer: &data,
+                file_path: None,
+            },
+        )
+        .unwrap();
+    system_table.boot_services().start_image(loaded).unwrap();
+
+    let res = system_table.exit_boot_services();
     Status::SUCCESS
 }

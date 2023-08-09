@@ -3,7 +3,6 @@ name = "no_kernel"
 version = "0.1.0"
 edition = "2021"
 
-build = "build.rs"
 
 [lib]
 name = "no_kernel"
@@ -12,6 +11,3 @@ path="src/kernel.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-
-[build-dependencies]
-nasm-rs = "0.2.5"

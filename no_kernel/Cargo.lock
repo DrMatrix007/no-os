@@ -3,14 +3,5 @@
 version = 3
 
 [[package]]
-name = "nasm-rs"
-version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe4d98d0065f4b1daf164b3eafb11974c94662e5e2396cf03f32d0bb5c17da51"
-
-[[package]]
 name = "no_kernel"
 version = "0.1.0"
-dependencies = [
- "nasm-rs",
-]

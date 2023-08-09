@@ -13,6 +13,7 @@ use uefi::{
     table::{Boot, SystemTable},
     CStr16, Handle, Status,
 };
+use uefi_services::println;
 
 fn load_file(
     path: &CStr16,
@@ -49,14 +50,17 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     uefi_services::init(&mut system_table).unwrap();
     system_table.stdout().clear().unwrap();
 
-    let mut kernel = load_file(cstr16!("no_kernel.no"), &system_table, None).unwrap();
+
+    let mut kernel = load_file(cstr16!("no_kernel.elf"), &system_table, None).unwrap();
     kernel.set_position(0xFFFFFFFFFFFFFFFF).unwrap();
     let size = kernel.get_position().unwrap() as usize;
+    kernel.set_position(0).unwrap();
+
     let mut data = Vec::with_capacity(size + 1);
     data.resize(size + 1 as usize, 0);
 
     kernel.read(data.as_mut()).unwrap();
-
+    println!("{}",data.len());
     // let elf = Elf::parse(kernel.);
     let loaded = system_table
         .boot_services()

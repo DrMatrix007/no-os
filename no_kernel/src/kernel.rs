@@ -9,6 +9,7 @@ fn panic_handler(_: &PanicInfo) -> ! {
 }
 
 #[no_mangle]
+// #[export_name = "no_kernel_main"]
 pub extern "C" fn no_kernel_main() {
-    loop{}
+    loop {}
 }

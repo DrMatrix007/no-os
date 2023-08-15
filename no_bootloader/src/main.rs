@@ -3,7 +3,9 @@
 
 extern crate alloc;
 
-use alloc::vec::Vec;
+use core::arch::asm;
+
+use alloc::{string::ToString, vec::Vec};
 use uefi::{
     cstr16, entry,
     proto::media::{
@@ -13,7 +15,7 @@ use uefi::{
     table::{Boot, SystemTable},
     CStr16, Handle, Status,
 };
-use uefi_services::println;
+use uefi_services::{print, println};
 
 fn load_file(
     path: &CStr16,
@@ -50,30 +52,42 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     uefi_services::init(&mut system_table).unwrap();
     system_table.stdout().clear().unwrap();
 
+    println!("hello world!");
 
     let mut kernel = load_file(cstr16!("no_kernel.elf"), &system_table, None).unwrap();
     kernel.set_position(0xFFFFFFFFFFFFFFFF).unwrap();
     let size = kernel.get_position().unwrap() as usize;
     kernel.set_position(0).unwrap();
 
-    let mut data = Vec::with_capacity(size + 1);
-    data.resize(size + 1 as usize, 0);
+    let mut data = Vec::with_capacity(size);
+    data.resize(size, 0);
 
     kernel.read(data.as_mut()).unwrap();
-    println!("{}",data.len());
-    // let elf = Elf::parse(kernel.);
-    let loaded = system_table
-        .boot_services()
-        .load_image(
-            image_handle,
-            uefi::table::boot::LoadImageSource::FromBuffer {
-                buffer: &data,
-                file_path: None,
-            },
-        )
-        .unwrap();
-    system_table.boot_services().start_image(loaded).unwrap();
+    // println!("{}", data.len());
+    let elf = goblin::elf::Elf::parse(&data).unwrap();
+    let entry = elf.entry;
 
-    let _ = system_table.exit_boot_services();
+    // let off = elf.program_headers.first().unwrap().p_offset as usize;
+    // let ph = elf.program_headers.first().unwrap();
+    // for i in &data {
+    //     print!("{:x} ",i)
+    // }
+    // println!(
+    //     "entry is {}, {:?}",
+    //     elf.entry, &elf as *const goblin::elf::Elf as usize
+    // );
+
+    // let f: extern "C" fn() -> i32 = unsafe { core::mem::transmute(data.as_ptr().add(ph.p_vaddr as _) as *const ()) };
+    unsafe {
+        system_table
+            .boot_services()
+            .set_mem(data.as_mut_ptr(), data.len(), 0);
+    }
+    let addr: extern "C" fn() -> i32 = unsafe { core::mem::transmute(entry as *const ()) };
+    // unsafe { asm!("call 32") };
+    let i = (addr)();
+
+    // println!("ans is {}", i);
+    // let _ = system_table.exit_boot_services();
     Status::SUCCESS
 }

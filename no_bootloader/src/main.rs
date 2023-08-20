@@ -3,9 +3,8 @@
 
 extern crate alloc;
 
-use core::arch::asm;
+use alloc::vec;
 
-use alloc::{string::ToString, vec::Vec};
 use uefi::{
     cstr16, entry,
     proto::media::{
@@ -15,7 +14,7 @@ use uefi::{
     table::{Boot, SystemTable},
     CStr16, Handle, Status,
 };
-use uefi_services::{print, println};
+use uefi_services::println;
 
 fn load_file(
     path: &CStr16,
@@ -44,7 +43,7 @@ fn load_file(
         )
         .ok()?;
 
-    return f.into_regular_file();
+    f.into_regular_file()
 }
 
 #[entry]
@@ -54,40 +53,87 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
 
     println!("hello world!");
 
-    let mut kernel = load_file(cstr16!("no_kernel.elf"), &system_table, None).unwrap();
+    let mut kernel = load_file(cstr16!("no_bootstrap.efi"), &system_table, None).unwrap();
     kernel.set_position(0xFFFFFFFFFFFFFFFF).unwrap();
     let size = kernel.get_position().unwrap() as usize;
     kernel.set_position(0).unwrap();
 
-    let mut data = Vec::with_capacity(size);
-    data.resize(size, 0);
+    let mut data = vec![0; size];
 
-    kernel.read(data.as_mut()).unwrap();
-    // println!("{}", data.len());
-    let elf = goblin::elf::Elf::parse(&data).unwrap();
-    let entry = elf.entry;
+    kernel.read(&mut data).unwrap();
 
-    // let off = elf.program_headers.first().unwrap().p_offset as usize;
-    // let ph = elf.program_headers.first().unwrap();
-    // for i in &data {
-    //     print!("{:x} ",i)
-    // }
-    // println!(
-    //     "entry is {}, {:?}",
-    //     elf.entry, &elf as *const goblin::elf::Elf as usize
-    // );
+    let bootstrap = system_table
+        .boot_services()
+        .load_image(
+            image_handle,
+            uefi::table::boot::LoadImageSource::FromBuffer {
+                buffer: &data,
+                file_path: None,
+            },
+        )
+        .expect("cant load bootstrap!");
 
-    // let f: extern "C" fn() -> i32 = unsafe { core::mem::transmute(data.as_ptr().add(ph.p_vaddr as _) as *const ()) };
+    system_table.boot_services().start_image(bootstrap).unwrap();
+
+    Status::SUCCESS
+}
+
+//oldshit:
+/*    let mut data = vec![0; size];
+
+kernel.read(data.as_mut()).unwrap();
+// println!("{}", data.len());
+let elf = goblin::elf::Elf::parse(&data).unwrap();
+let entry = elf.entry;
+
+println!("{}", (data.len() + 0x0999) / 0x1000);
+println!("{}",elf.program_headers.len());
+for phdr in elf.program_headers.iter().filter(|a| a.p_type == 1) {
+    println!("{:?}",phdr);
+    let data_ptr = system_table
+        .boot_services()
+        .allocate_pages(
+            uefi::table::boot::AllocateType::AnyPages,
+            MemoryType::LOADER_DATA,
+            (data.len() + 0x0999) / 0x1000,
+        )
+        .unwrap();
+
+    kernel.set_position(phdr.p_offset).unwrap();
+    kernel.read(&mut data).unwrap();
     unsafe {
         system_table
             .boot_services()
-            .set_mem(data.as_mut_ptr(), data.len(), 0);
+            .memmove(data_ptr as _, data.as_ptr(), phdr.p_filesz as _)
     }
-    let addr: extern "C" fn() -> i32 = unsafe { core::mem::transmute(entry as *const ()) };
-    // unsafe { asm!("call 32") };
-    let i = (addr)();
-
-    // println!("ans is {}", i);
-    // let _ = system_table.exit_boot_services();
-    Status::SUCCESS
 }
+
+let map_size = system_table.boot_services().memory_map_size();
+let mut mem_map_vec = vec![0; (map_size.entry_size + map_size.map_size)];
+let mem_map = system_table
+    .boot_services()
+    .memory_map(&mut mem_map_vec)
+    .unwrap();
+// println!("{:?}",mem_map);
+// write here
+let (a, mut mem_map) = system_table.exit_boot_services();
+
+// // write here
+mem_map.sort();
+
+// // let i = (addr)();
+// // println!("ans is {}", i);
+// // let _ = system_table.exit_boot_services();
+for i in mem_map.entries() {
+    match i.ty {
+        MemoryType::CONVENTIONAL
+        | MemoryType::LOADER_CODE
+        | MemoryType::LOADER_DATA
+        | MemoryType::BOOT_SERVICES_CODE
+        | MemoryType::BOOT_SERVICES_DATA => {
+            let addr: fn() -> i32 = unsafe { core::mem::transmute(entry) };
+            addr();
+        }
+        _ => {}
+    }
+} */

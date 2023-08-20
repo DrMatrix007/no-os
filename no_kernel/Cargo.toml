@@ -6,7 +6,7 @@ edition = "2021"
 
 [lib]
 name = "no_kernel"
-crate-type = ["staticlib"]
+crate-type = ["staticlib","rlib"]
 path="src/kernel.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

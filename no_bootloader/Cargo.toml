@@ -5,6 +5,11 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[lib]
+name = "no_bootloader"
+crate-type = ["staticlib","rlib"]
+path="src/main.rs"
+
 [dependencies]
 goblin = { version = "0.7.1", features = ["elf32", "elf64", "alloc", "archive", "endian_fd"], default-features = false}
 uefi = "0.24.0"

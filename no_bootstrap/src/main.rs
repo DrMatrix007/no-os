@@ -1,5 +1,7 @@
 #![no_main]
 #![no_std]
+#![allow(non_snake_case)]
+#![allow(non_camel_case_types)]
 
 // extern crate no_kernel;
 
@@ -20,12 +22,10 @@
 // }
 
 /////////////////
-///
-///
-///
-///
-///
+
 extern crate alloc;
+extern crate no_bootloader;
+extern crate no_kernel;
 
 use core::panic::PanicInfo;
 
@@ -33,15 +33,20 @@ use alloc::vec;
 use alloc::vec::Vec;
 use uefi::proto::console::gop::{BltOp, BltPixel, BltRegion, GraphicsOutput};
 use uefi::Result;
+
 #[panic_handler]
 fn panic_handler(data: &PanicInfo) -> ! {
     uefi_services::println!("fuck {}", data);
     loop {}
 }
+
 use core::mem;
+use core::ptr;
 use uefi::prelude::*;
 use uefi::proto::rng::Rng;
-use uefi::table::boot::BootServices;
+use uefi::table::boot::{BootServices, MemoryMap, AllocateType};
+use uefi::prelude::*;
+use uefi::ResultExt;
 
 #[derive(Clone, Copy)]
 struct Point {
@@ -87,75 +92,117 @@ impl Buffer {
     }
 }
 
-/// Get a random `usize` value.
-fn get_random_usize(rng: &mut Rng) -> usize {
-    let mut buf = [0; mem::size_of::<usize>()];
-    rng.get_rng(None, &mut buf).expect("get_rng failed");
-    usize::from_le_bytes(buf)
+struct Framebuffer{
+	BaseAddress: *mut core::ffi::c_void,
+	BufferSize: u64,
+	Width: u32,
+	Height: u32,
+	PixelsPerScanLine: u32,
 }
 
-fn draw_sierpinski(bt: &BootServices) -> Result {
-    // Open graphics output protocol.
-    let gop_handle = bt.get_handle_for_protocol::<GraphicsOutput>().unwrap();
-    let mut gop = bt
-        .open_protocol_exclusive::<GraphicsOutput>(gop_handle)
-        .unwrap();
+const PSF1_MAGIC0: u8 = 0x36;
+const PSF1_MAGIC1: u8 = 0x04;
 
-    // Open random number generator protocol.
+struct PSF1_HEADER{
+	magic: [u8; 2],
+	mode: u8,
+	charsize: u8,
+}
 
-    // Create a buffer to draw into.
-    let (width, height) = gop.current_mode_info().resolution();
-    let mut buffer = Buffer::new(width, height);
+struct PSF1_FONT{
+	psf1_Header: *mut PSF1_HEADER,
+	glyphBuffer: *mut core::ffi::c_void,
+}
 
-    // Initialize the buffer with a simple gradient background.
-    for y in 0..height {
-        let r = ((y as f32) / ((height - 1) as f32)) * 255.0;
-        for x in 0..width {
-            let g = ((x as f32) / ((width - 1) as f32)) * 255.0;
-            let pixel = buffer.pixel(x, y).unwrap();
-            pixel.red = r as u8;
-            pixel.green = g as u8;
-            pixel.blue = 255;
+struct BootInfo<'a> {
+    framebuffer: *mut Framebuffer,
+    psf1_Font: *mut PSF1_FONT,
+    mMap: *mut MemoryMap<'a>,
+    mMapSize: usize,
+    mMapDescSize: usize,
+}
+
+fn initialize_gop(system_table: &SystemTable<Boot>) -> Option<Framebuffer> {
+    //let gop_guid = ; // i have no idea how to get the gop's guid
+
+    let gop: *mut GraphicsOutput = system_table
+        .boot_services()
+        .locate_protocol::<GraphicsOutput>(&gop_guid, ptr::null_mut())
+        .expect_success("Failed to locate GOP")
+        .get();
+
+    let mode_info = unsafe { (*gop).current_mode_info() };
+    let framebuffer = Framebuffer {
+        BaseAddress: mode_info.frame_buffer_base as usize,
+        BufferSize: mode_info.frame_buffer_size as u64,
+        Width: mode_info.horizontal_resolution as u32,
+        Height: mode_info.vertical_resolution as u32,
+        PixelsPerScanLine: mode_info.pixels_per_scan_line as u32,
+    };
+
+    Some(framebuffer)
+}
+
+fn load_psf1_font(
+    system_table: &SystemTable<Boot>,
+) -> Option<*mut PSF1_FONT> {
+    let font = no_bootloader::load_file(cstr16!("font"), system_table, None); // TODO: change path
+    
+    let mut font_header: *mut PSF1_HEADER = system_table
+        .boot_services()
+        .allocate_pool(AllocateType::LoaderData, core::mem::size_of::<PSF1_HEADER>())?
+        .cast::<PSF1_HEADER>();
+
+    let mut size: usize = core::mem::size_of::<PSF1_HEADER>();
+    font.read(&mut size, font_header);
+    unsafe {
+        if (*font_header).magic[0] != PSF1_MAGIC0 || (*font_header).magic[1] != PSF1_MAGIC1 {
+            return None;
+        }
+    }
+    let mut glyph_buffer_size = unsafe {(*font_header).charsize * 256 };
+    unsafe {
+        if (*font_header).mode == 1 {
+            glyph_buffer_size = (*font_header).charsize * 512;
         }
     }
 
-    let size = Point::new(width as f32, height as f32);
+    let mut glyph_buffer = system_table
+        .boot_services()
+        .allocate_pool(AllocateType::LoaderData, glyph_buffer_size)?
+        .cast::<usize>();
 
-    // Define the vertices of a big triangle.
-    let border = 20.0;
-    let triangle = [
-        Point::new(size.x / 2.0, border),
-        Point::new(border, size.y - border),
-        Point::new(size.x - border, size.y - border),
-    ];
+    font.set_position(core::mem::size_of::<PSF1_HEADER>() as u64);
+    font.read(&mut glyph_buffer_size, glyph_buffer);
 
-    // `p` is the point to draw. Start at the center of the triangle.
-    let mut p = Point::new(size.x / 2.0, size.y / 2.0);
-    let mut c = 0;
-    // Loop forever, drawing the frame after each new point is changed.
-    loop {
-        // Choose one of the triangle's vertices at random.
-        let v = triangle[c % 3];
-        c += 1;
-        // Move `p` halfway to the chosen vertex.
-        p.x = (p.x + v.x) * 0.5;
-        p.y = (p.y + v.y) * 0.5;
+    let mut finished_font: *mut PSF1_FONT = system_table
+        .boot_services()
+        .allocate_pool(AllocateType::LoaderData, core::mem::size_of::<PSF1_FONT>())?
+        .cast::<PSF1_FONT>();
 
-        // Set `p` to black.
-        let pixel = buffer.pixel(p.x as usize, p.y as usize).unwrap();
-        pixel.red = 0;
-        pixel.green = 100;
-        pixel.blue = 0;
-
-        // Draw the buffer to the screen.
-        buffer.blit(&mut gop).unwrap();
+    unsafe {
+        (*finished_font).psf1_Header = font_header;
+        (*finished_font).glyphBuffer = glyph_buffer;
     }
+
+    Some(finished_font)
 }
 
 #[entry]
 fn main(_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     uefi_services::init(&mut system_table).unwrap();
     let bt = system_table.boot_services();
-    draw_sierpinski(bt).unwrap();
+    let mut newBuffer = initialize_gop().unwrap();
+    let mut font = load_psf1_font(&system_table).unwrap();
+    let mut boot_info: BootInfo = BootInfo { 
+        framebuffer: newBuffer,
+        psf1_Font: font, mMap: (), // not so sure how to get the memory map
+        mMapSize: (),
+        mMapDescSize: () 
+    };
+
+    // TOOD: call no_kernel_main and pass the boot_info
+    // and pray for it to work _/\_
+
     Status::SUCCESS
 }

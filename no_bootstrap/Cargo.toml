@@ -10,3 +10,4 @@ uefi = "0.24.0"
 uefi-services = {version = "*",default-features = false,features = ["logger"]}
 
 no_kernel = {path="../no_kernel"}
+no_bootloader = {path="../no_bootloader"}

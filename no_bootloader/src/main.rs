@@ -16,7 +16,7 @@ use uefi::{
 };
 use uefi_services::println;
 
-fn load_file(
+pub fn load_file(
     path: &CStr16,
     table: &SystemTable<Boot>,
     dir: Option<Directory>,

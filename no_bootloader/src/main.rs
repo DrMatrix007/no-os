@@ -51,7 +51,6 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     uefi_services::init(&mut system_table).unwrap();
     system_table.stdout().clear().unwrap();
 
-
     let mut kernel = load_file(cstr16!("no_bootstrap.efi"), &system_table, None).unwrap();
     kernel.set_position(0xFFFFFFFFFFFFFFFF).unwrap();
     let size = kernel.get_position().unwrap() as usize;
@@ -72,6 +71,8 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
         )
         .expect("cant load bootstrap!");
 
+        println!("starting!");
+    
     system_table.boot_services().start_image(bootstrap).unwrap();
 
     Status::SUCCESS

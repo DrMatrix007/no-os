@@ -24,28 +24,24 @@
 /////////////////
 
 extern crate alloc;
-extern crate no_bootloader;
-extern crate no_kernel;
 
-use core::panic::PanicInfo;
 
 use alloc::vec;
 use alloc::vec::Vec;
-use uefi::proto::console::gop::{BltOp, BltPixel, BltRegion, GraphicsOutput};
-use uefi::Result;
+use uefi::proto::console::gop::{BltOp, BltPixel, BltRegion, FrameBuffer, GraphicsOutput};
+use uefi::proto::media::file::{Directory, File, FileAttribute, RegularFile};
+use uefi::proto::media::fs::SimpleFileSystem;
+use uefi::{CStr16, Result};
+use uefi_services::println;
 
-#[panic_handler]
-fn panic_handler(data: &PanicInfo) -> ! {
-    uefi_services::println!("fuck {}", data);
-    loop {}
-}
 
 use core::mem;
 use core::ptr;
 use uefi::prelude::*;
 use uefi::proto::rng::Rng;
-use uefi::table::boot::{BootServices, MemoryMap, AllocateType};
-use uefi::prelude::*;
+use uefi::table::boot::{
+    AllocateType, BootServices, MemoryMap, MemoryType, OpenProtocolAttributes, ScopedProtocol,
+};
 use uefi::ResultExt;
 
 #[derive(Clone, Copy)]
@@ -92,98 +88,117 @@ impl Buffer {
     }
 }
 
-struct Framebuffer{
-	BaseAddress: *mut core::ffi::c_void,
-	BufferSize: u64,
-	Width: u32,
-	Height: u32,
-	PixelsPerScanLine: u32,
-}
-
 const PSF1_MAGIC0: u8 = 0x36;
 const PSF1_MAGIC1: u8 = 0x04;
 
-struct PSF1_HEADER{
-	magic: [u8; 2],
-	mode: u8,
-	charsize: u8,
+struct PSF1_HEADER {
+    magic: [u8; 2],
+    mode: u8,
+    charsize: u8,
 }
 
-struct PSF1_FONT{
-	psf1_Header: *mut PSF1_HEADER,
-	glyphBuffer: *mut core::ffi::c_void,
+struct PSF1_FONT {
+    psf1_Header: *mut PSF1_HEADER,
+    glyphBuffer: *mut core::ffi::c_void,
 }
 
 struct BootInfo<'a> {
-    framebuffer: *mut Framebuffer,
-    psf1_Font: *mut PSF1_FONT,
-    mMap: *mut MemoryMap<'a>,
-    mMapSize: usize,
-    mMapDescSize: usize,
+    framebuffer: FrameBuffer<'a>,
+    psf1_Font: PSF1_FONT,
 }
 
-fn initialize_gop(system_table: &SystemTable<Boot>) -> Option<Framebuffer> {
-    //let gop_guid = ; // i have no idea how to get the gop's guid
-
-    let gop: *mut GraphicsOutput = system_table
+pub fn load_file(
+    path: &CStr16,
+    table: &SystemTable<Boot>,
+    dir: Option<Directory>,
+) -> Option<RegularFile> {
+    let fs = table
         .boot_services()
-        .locate_protocol::<GraphicsOutput>(&gop_guid, ptr::null_mut())
-        .expect_success("Failed to locate GOP")
-        .get();
+        .get_handle_for_protocol::<SimpleFileSystem>()
+        .ok()?;
+    let mut fs = table
+        .boot_services()
+        .open_protocol_exclusive::<SimpleFileSystem>(fs)
+        .ok()?;
 
-    let mode_info = unsafe { (*gop).current_mode_info() };
-    let framebuffer = Framebuffer {
-        BaseAddress: mode_info.frame_buffer_base as usize,
-        BufferSize: mode_info.frame_buffer_size as u64,
-        Width: mode_info.horizontal_resolution as u32,
-        Height: mode_info.vertical_resolution as u32,
-        PixelsPerScanLine: mode_info.pixels_per_scan_line as u32,
+    let mut dir = match dir {
+        Some(a) => Some(a),
+        None => fs.open_volume().ok(),
+    }?;
+
+    let f = dir
+        .open(
+            path,
+            uefi::proto::media::file::FileMode::Read,
+            FileAttribute::READ_ONLY,
+        )
+        .ok()?;
+
+    f.into_regular_file()
+}
+
+fn initialize_gop(system_table: &SystemTable<Boot>) -> Option<ScopedProtocol<'_, GraphicsOutput>> {
+    let handle = system_table
+        .boot_services()
+        .get_handle_for_protocol::<GraphicsOutput>()
+        .ok().unwrap();
+    println!("before a");
+    let gop = system_table
+        .boot_services()
+        .open_protocol_exclusive::<GraphicsOutput>(handle)
+        .ok().unwrap();
+    println!("after a");
+
+    Some(gop)
+}
+
+fn load_psf1_font(system_table: &SystemTable<Boot>) -> Option<PSF1_FONT> {
+    let mut font = load_file(cstr16!("font"), system_table, None)?; // TODO: change path
+
+    let size: usize = core::mem::size_of::<PSF1_HEADER>();
+    let font_header_data = unsafe {
+        core::slice::from_raw_parts_mut(
+            system_table
+                .boot_services()
+                .allocate_pool(MemoryType::LOADER_DATA, size)
+                .ok()?,
+            size,
+        )
     };
 
-    Some(framebuffer)
-}
+    font.read(font_header_data).unwrap();
 
-fn load_psf1_font(
-    system_table: &SystemTable<Boot>,
-) -> Option<*mut PSF1_FONT> {
-    let font = no_bootloader::load_file(cstr16!("font"), system_table, None); // TODO: change path
-    
-    let mut font_header: *mut PSF1_HEADER = system_table
-        .boot_services()
-        .allocate_pool(AllocateType::LoaderData, core::mem::size_of::<PSF1_HEADER>())?
-        .cast::<PSF1_HEADER>();
+    let font_header: *mut PSF1_HEADER = font_header_data.as_mut_ptr() as *mut PSF1_HEADER;
 
-    let mut size: usize = core::mem::size_of::<PSF1_HEADER>();
-    font.read(&mut size, font_header);
     unsafe {
         if (*font_header).magic[0] != PSF1_MAGIC0 || (*font_header).magic[1] != PSF1_MAGIC1 {
             return None;
         }
     }
-    let mut glyph_buffer_size = unsafe {(*font_header).charsize * 256 };
+    let mut glyph_buffer_size = unsafe { (*font_header).charsize as usize * 256 };
     unsafe {
         if (*font_header).mode == 1 {
-            glyph_buffer_size = (*font_header).charsize * 512;
+            glyph_buffer_size = (*font_header).charsize as usize * 512;
         }
     }
 
-    let mut glyph_buffer = system_table
-        .boot_services()
-        .allocate_pool(AllocateType::LoaderData, glyph_buffer_size)?
-        .cast::<usize>();
+    let glyph_buffer = unsafe {
+        core::slice::from_raw_parts_mut(
+            system_table
+                .boot_services()
+                .allocate_pool(MemoryType::LOADER_DATA, glyph_buffer_size)
+                .ok()?,
+            glyph_buffer_size,
+        )
+    };
+    font.set_position(core::mem::size_of::<PSF1_HEADER>() as u64)
+        .unwrap();
+    font.read(glyph_buffer).unwrap();
 
-    font.set_position(core::mem::size_of::<PSF1_HEADER>() as u64);
-    font.read(&mut glyph_buffer_size, glyph_buffer);
-
-    let mut finished_font: *mut PSF1_FONT = system_table
-        .boot_services()
-        .allocate_pool(AllocateType::LoaderData, core::mem::size_of::<PSF1_FONT>())?
-        .cast::<PSF1_FONT>();
-
-    unsafe {
-        (*finished_font).psf1_Header = font_header;
-        (*finished_font).glyphBuffer = glyph_buffer;
-    }
+    let finished_font = PSF1_FONT {
+        glyphBuffer: glyph_buffer.as_mut_ptr() as _,
+        psf1_Header: font_header,
+    };
 
     Some(finished_font)
 }
@@ -191,14 +206,13 @@ fn load_psf1_font(
 #[entry]
 fn main(_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     uefi_services::init(&mut system_table).unwrap();
-    let bt = system_table.boot_services();
-    let mut newBuffer = initialize_gop().unwrap();
-    let mut font = load_psf1_font(&system_table).unwrap();
-    let mut boot_info: BootInfo = BootInfo { 
-        framebuffer: newBuffer,
-        psf1_Font: font, mMap: (), // not so sure how to get the memory map
-        mMapSize: (),
-        mMapDescSize: () 
+    println!("before init gop");
+    let mut newBuffer = initialize_gop(&system_table).unwrap();
+    println!("after init gop");
+    let font = load_psf1_font(&system_table).unwrap();
+    let _boot_info = BootInfo {
+        framebuffer: newBuffer.frame_buffer(),
+        psf1_Font: font,
     };
 
     // TOOD: call no_kernel_main and pass the boot_info

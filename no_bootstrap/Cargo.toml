@@ -7,7 +7,6 @@ edition = "2021"
 
 [dependencies]
 uefi = "0.24.0"
-uefi-services = {version = "*",default-features = false,features = ["logger"]}
+uefi-services = {version = "*",default-features = false,features = ["logger","panic_handler"]}
 
-no_kernel = {path="../no_kernel"}
-no_bootloader = {path="../no_bootloader"}
+# no_kernel = {path="../no_kernel"}   

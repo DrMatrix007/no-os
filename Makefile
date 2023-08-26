@@ -3,7 +3,7 @@ release:
 		cargo build --release;
 	cd no_bootstrap; \
 		cargo build --release;
-
+	
 	cp no_bootloader/target/x86_64-unknown-uefi/release/no_bootloader.efi esp/efi/boot/bootx64.efi
 	cp no_bootstrap/target/x86_64-unknown-uefi/release/no_bootstrap.efi esp/no_bootstrap.efi
 	

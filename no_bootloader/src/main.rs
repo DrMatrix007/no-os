@@ -114,12 +114,12 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
             .memmove((i) as _, data.as_ptr(), data.len());
     }
 
-    let f: extern "C" fn() -> i32 = unsafe { core::mem::transmute(elf.entry) };
+    let f: extern "C" fn() -> i32 = unsafe { core::mem::transmute(elf.entry+10000) };
 
     // let _ = system_table.exit_boot_services();
 
     let i = f();
-    println!("{}",i);
+    println!("{}",i as u8 as char);
     // system_table.boot_services().start_image(bootstrap).unwrap();
     loop{}
     Status::SUCCESS

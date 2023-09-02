@@ -11,7 +11,10 @@ use uefi::{
         file::{Directory, File, FileAttribute, RegularFile},
         fs::SimpleFileSystem,
     },
-    table::{Boot, SystemTable},
+    table::{
+        boot::{AllocateType, MemoryType},
+        Boot, SystemTable,
+    },
     CStr16, Handle, Status,
 };
 use uefi_services::println;
@@ -51,29 +54,74 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     uefi_services::init(&mut system_table).unwrap();
     system_table.stdout().clear().unwrap();
 
-
-    let mut kernel = load_file(cstr16!("no_bootstrap.efi"), &system_table, None).unwrap();
+    let mut kernel = load_file(cstr16!("no_kernel.elf"), &system_table, None).unwrap();
     kernel.set_position(0xFFFFFFFFFFFFFFFF).unwrap();
     let size = kernel.get_position().unwrap() as usize;
     kernel.set_position(0).unwrap();
 
-    let mut data = vec![0; size];
-
-    kernel.read(&mut data).unwrap();
-
-    let bootstrap = system_table
-        .boot_services()
-        .load_image(
-            image_handle,
-            uefi::table::boot::LoadImageSource::FromBuffer {
-                buffer: &data,
-                file_path: None,
-            },
+    let data = unsafe {
+        core::slice::from_raw_parts_mut(
+            system_table
+                .boot_services()
+                .allocate_pool(MemoryType::LOADER_DATA, size)
+                .unwrap(),
+            size,
         )
-        .expect("cant load bootstrap!");
+    };
 
-    system_table.boot_services().start_image(bootstrap).unwrap();
+    kernel.read(data).unwrap();
 
+    let elf = goblin::elf::Elf::parse(data).unwrap();
+
+
+    let i = elf
+        .program_headers
+        .iter()
+        .find(|a| a.p_type == 1)
+        .map(|i| {
+            let pages = i.p_memsz as usize + 0x1000 - 1;
+            let pages = pages / 0x1000;
+            println!("pages: {}", pages);
+            println!("flsz: {}",i.p_filesz);
+            println!("ppaddr: {}",i.p_paddr);
+            system_table
+                .boot_services()
+                .allocate_pages(
+                    uefi::table::boot::AllocateType::Address(i.p_paddr),
+                    MemoryType::LOADER_DATA,
+                    pages,
+                )
+                .unwrap()
+        })
+        .unwrap();
+    
+    println!("size: {}",data.len());
+    println!("entry: {}", elf.header.e_entry);
+    // println!("{}", i);
+    // let bootstrap = system_table
+    //     .boot_services()
+    //     .load_image(
+    //         image_handle,
+    //         uefi::table::boot::LoadImageSource::FromBuffer {
+    //             buffer: &data,
+    //             file_path: None,
+    //         },
+    //     )
+    //     .expect("cant load bootstrap!");
+    unsafe {
+        system_table
+            .boot_services()
+            .memmove((i) as _, data.as_ptr(), data.len());
+    }
+
+    let f: extern "C" fn() -> i32 = unsafe { core::mem::transmute(elf.entry) };
+
+    // let _ = system_table.exit_boot_services();
+
+    let i = f();
+    println!("{}",i);
+    // system_table.boot_services().start_image(bootstrap).unwrap();
+    loop{}
     Status::SUCCESS
 }
 

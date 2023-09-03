@@ -1,4 +1,4 @@
-use volatile::Volatile;
+// use volatile::Volatile;
 
 // lazy_static! {
 //     /// A global `Writer` instance that can be used for printing to the VGA text buffer.
@@ -11,11 +11,9 @@ use volatile::Volatile;
 //     });
 // }
 
-
-
 /// The standard color palette in VGA text mode.
 #[allow(dead_code)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Color {
     Black = 0,
@@ -37,7 +35,7 @@ pub enum Color {
 }
 
 /// A combination of a foreground and a background color.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
 struct ColorCode(u8);
 
@@ -49,7 +47,7 @@ impl ColorCode {
 }
 
 /// A screen character in the VGA text buffer, consisting of an ASCII character and a `ColorCode`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(C)]
 struct ScreenChar {
     ascii_character: u8,
@@ -64,7 +62,7 @@ const BUFFER_WIDTH: usize = 80;
 /// A structure representing the VGA text buffer.
 #[repr(transparent)]
 struct Buffer {
-    chars: [[Volatile<ScreenChar>; BUFFER_WIDTH]; BUFFER_HEIGHT],
+    chars: [[ScreenChar; BUFFER_WIDTH]; BUFFER_HEIGHT],
 }
 
 /// A writer type that allows writing ASCII bytes and strings to an underlying `Buffer`.
@@ -93,7 +91,7 @@ impl Writer {
                 let col = self.column_position;
 
                 let color_code = self.color_code;
-                self.buffer.chars[row][col].write(ScreenChar {
+                self.buffer.chars[row][col] = (ScreenChar {
                     ascii_character: byte,
                     color_code,
                 });
@@ -122,8 +120,8 @@ impl Writer {
     fn new_line(&mut self) {
         for row in 1..BUFFER_HEIGHT {
             for col in 0..BUFFER_WIDTH {
-                let character = self.buffer.chars[row][col].read();
-                self.buffer.chars[row - 1][col].write(character);
+                let character = self.buffer.chars[row][col];
+                self.buffer.chars[row - 1][col] = (character);
             }
         }
         self.clear_row(BUFFER_HEIGHT - 1);
@@ -137,7 +135,7 @@ impl Writer {
             color_code: self.color_code,
         };
         for col in 0..BUFFER_WIDTH {
-            self.buffer.chars[row][col].write(blank);
+            self.buffer.chars[row][col] = blank;
         }
     }
 }

@@ -2,7 +2,7 @@
 #![no_main]
 use core::panic::PanicInfo;
 
-mod vga_buffer;
+pub mod vga_buffer;
 
 #[panic_handler]
 fn panic_handler(_: &PanicInfo) -> ! {
@@ -13,7 +13,7 @@ fn panic_handler(_: &PanicInfo) -> ! {
 pub extern "C" fn no_kernel_main() -> i32 {
     //println!("hello bozo");
     //WRITER.lock().write_byte(65);
-    //vga_buffer::a();
-
-    'A' as _
+    // vga_buffer::a();
+    // loop{}
+    42
 }

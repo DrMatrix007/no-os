@@ -3,7 +3,12 @@
 
 extern crate alloc;
 
-use alloc::vec;
+use core::{fmt::Write, time::Duration};
+
+use alloc::{
+    string::{String, ToString},
+    vec,
+};
 
 use uefi::{
     cstr16, entry,
@@ -17,7 +22,7 @@ use uefi::{
     },
     CStr16, Handle, Status,
 };
-use uefi_services::println;
+use uefi_services::{println, system_table};
 
 fn load_file(
     path: &CStr16,
@@ -49,6 +54,19 @@ fn load_file(
     f.into_regular_file()
 }
 
+fn prretty_print(
+    system_table: &mut SystemTable<Boot>,
+    data: impl AsRef<str>,
+    char_time_spereator: Duration,
+) {
+    for i in data.as_ref().chars() {
+        system_table.stdout().write_char(i).unwrap();
+        system_table
+            .boot_services()
+            .stall(char_time_spereator.as_micros() as _)
+    }
+}
+
 #[entry]
 fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     uefi_services::init(&mut system_table).unwrap();
@@ -73,7 +91,7 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
 
     let elf = goblin::elf::Elf::parse(data).unwrap();
 
-
+    // prretty_print("nice".to_string(),Duration::from_millis(1000));
     let i = elf
         .program_headers
         .iter()
@@ -81,9 +99,6 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
         .map(|i| {
             let pages = i.p_memsz as usize + 0x1000 - 1;
             let pages = pages / 0x1000;
-            println!("pages: {}", pages);
-            println!("flsz: {}",i.p_filesz);
-            println!("ppaddr: {}",i.p_paddr);
             system_table
                 .boot_services()
                 .allocate_pages(
@@ -94,9 +109,7 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                 .unwrap()
         })
         .unwrap();
-    
-    println!("size: {}",data.len());
-    println!("entry: {}", elf.header.e_entry);
+
     // println!("{}", i);
     // let bootstrap = system_table
     //     .boot_services()
@@ -116,12 +129,20 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
 
     let f: extern "C" fn() -> i32 = unsafe { core::mem::transmute(elf.entry) };
 
+    prretty_print(
+        &mut system_table,
+        "starting in:\n",
+        Duration::from_secs_f32(0.05),
+    );
+    prretty_print(&mut system_table, "3...2...1...", Duration::from_secs_f32(0.2));
+
+    system_table.stdout().clear().unwrap();
+
     let _ = system_table.exit_boot_services();
 
     let i = f();
-    println!("{}",i as u8 as char);
+    println!("{}", i as u8 as char);
     // system_table.boot_services().start_image(bootstrap).unwrap();
-    loop{}
     Status::SUCCESS
 }
 

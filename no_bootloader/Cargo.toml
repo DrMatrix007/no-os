@@ -9,4 +9,5 @@ edition = "2021"
 goblin = { version = "0.7.1", features = ["elf32", "elf64", "alloc", "archive", "endian_fd"], default-features = false}
 uefi = "0.24.0"
 uefi-services = "0.21.0"
+uefi-raw="*"
 

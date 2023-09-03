@@ -4,14 +4,23 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-name="no_kernel"
-crate-type = ["lib"]
+name = "no_kernel"
+crate-type = ["staticlib"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-spin="0.5.2"
+uefi = { version = "0.24.0", default-features = false, features = [] }
+# embedded-graphics = "0.8.1"
+# spin = "0.5.2"
 # volatile = "0.2.6"
+# compiler_builtins = { version = "0.1.101",default-features = false,features = []}
+# compiler_builtins = { version = "*", default-features = false,features = ["c","cc", "mem", "compiler-builtins"] }
+# compiler_builtins="*"
+# [dependencies.compiler_builtins]
+# git = "https://github.com/rust-lang/compiler-builtins"
+# features = ["c","mem"]
+# uefi = "*"
 
-[dependencies.lazy_static]
-version = "1.0"
-features = ["spin_no_std"]
+# [dependencies.lazy_static]
+# version = "1.0"
+# features = ["spin_no_std"]

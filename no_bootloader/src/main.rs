@@ -5,24 +5,20 @@ extern crate alloc;
 
 use core::{fmt::Write, time::Duration};
 
-use alloc::{
-    string::{String, ToString},
-    vec,
-};
-
 use uefi::{
     cstr16, entry,
-    proto::media::{
-        file::{Directory, File, FileAttribute, RegularFile},
-        fs::SimpleFileSystem,
+    proto::{
+        console::gop::{GraphicsOutput, BltOp, BltPixel},
+        media::{
+            file::{Directory, File, FileAttribute, RegularFile},
+            fs::SimpleFileSystem,
+        },
+        ProtocolPointer,
     },
-    table::{
-        boot::{AllocateType, MemoryType},
-        Boot, SystemTable,
-    },
+    table::{boot::MemoryType, Boot, SystemTable},
     CStr16, Handle, Status,
 };
-use uefi_services::{println, system_table};
+use uefi_services::println;
 
 fn load_file(
     path: &CStr16,
@@ -70,6 +66,7 @@ fn prretty_print(
 #[entry]
 fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     uefi_services::init(&mut system_table).unwrap();
+
     system_table.stdout().clear().unwrap();
 
     let mut kernel = load_file(cstr16!("no_kernel.elf"), &system_table, None).unwrap();
@@ -91,7 +88,6 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
 
     let elf = goblin::elf::Elf::parse(data).unwrap();
 
-    // prretty_print("nice".to_string(),Duration::from_millis(1000));
     let i = elf
         .program_headers
         .iter()
@@ -110,98 +106,67 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
         })
         .unwrap();
 
-    // println!("{}", i);
-    // let bootstrap = system_table
-    //     .boot_services()
-    //     .load_image(
-    //         image_handle,
-    //         uefi::table::boot::LoadImageSource::FromBuffer {
-    //             buffer: &data,
-    //             file_path: None,
-    //         },
-    //     )
-    //     .expect("cant load bootstrap!");
     unsafe {
         system_table
             .boot_services()
             .memmove((i) as _, data.as_ptr(), data.len());
     }
 
-    let f: extern "C" fn() -> i32 = unsafe { core::mem::transmute(elf.entry) };
-
     prretty_print(
         &mut system_table,
         "starting in:\n",
         Duration::from_secs_f32(0.05),
     );
-    prretty_print(&mut system_table, "3...2...1...", Duration::from_secs_f32(0.2));
+    prretty_print(
+        &mut system_table,
+        "3...2...1...",
+        Duration::from_secs_f32(0.05),
+    );
 
     system_table.stdout().clear().unwrap();
 
-    let _ = system_table.exit_boot_services();
+    let gop_scoped = unsafe {
+        {
+            let handle = system_table
+                .boot_services()
+                .get_handle_for_protocol::<GraphicsOutput>()
+                .unwrap();
+            // system_table.boot_services()
 
-    let i = f();
-    println!("{}", i as u8 as char);
-    // system_table.boot_services().start_image(bootstrap).unwrap();
-    Status::SUCCESS
-}
+            system_table
+                .boot_services()
+                .open_protocol::<GraphicsOutput>(
+                    uefi::table::boot::OpenProtocolParams {
+                        handle,
+                        agent: image_handle,
+                        controller: None,
+                    },
+                    uefi::table::boot::OpenProtocolAttributes::GetProtocol,
+                )
+                .unwrap()
 
-//oldshit:
-/*    let mut data = vec![0; size];
-
-kernel.read(data.as_mut()).unwrap();
-// println!("{}", data.len());
-let elf = goblin::elf::Elf::parse(&data).unwrap();
-let entry = elf.entry;
-
-println!("{}", (data.len() + 0x0999) / 0x1000);
-println!("{}",elf.program_headers.len());
-for phdr in elf.program_headers.iter().filter(|a| a.p_type == 1) {
-    println!("{:?}",phdr);
-    let data_ptr = system_table
-        .boot_services()
-        .allocate_pages(
-            uefi::table::boot::AllocateType::AnyPages,
-            MemoryType::LOADER_DATA,
-            (data.len() + 0x0999) / 0x1000,
-        )
-        .unwrap();
-
-    kernel.set_position(phdr.p_offset).unwrap();
-    kernel.read(&mut data).unwrap();
-    unsafe {
-        system_table
-            .boot_services()
-            .memmove(data_ptr as _, data.as_ptr(), phdr.p_filesz as _)
-    }
-}
-
-let map_size = system_table.boot_services().memory_map_size();
-let mut mem_map_vec = vec![0; (map_size.entry_size + map_size.map_size)];
-let mem_map = system_table
-    .boot_services()
-    .memory_map(&mut mem_map_vec)
-    .unwrap();
-// println!("{:?}",mem_map);
-// write here
-let (a, mut mem_map) = system_table.exit_boot_services();
-
-// // write here
-mem_map.sort();
-
-// // let i = (addr)();
-// // println!("ans is {}", i);
-// // let _ = system_table.exit_boot_services();
-for i in mem_map.entries() {
-    match i.ty {
-        MemoryType::CONVENTIONAL
-        | MemoryType::LOADER_CODE
-        | MemoryType::LOADER_DATA
-        | MemoryType::BOOT_SERVICES_CODE
-        | MemoryType::BOOT_SERVICES_DATA => {
-            let addr: fn() -> i32 = unsafe { core::mem::transmute(entry) };
-            addr();
         }
-        _ => {}
-    }
-} */
+    };
+    let gop: *mut _  = gop_scoped.get_mut().unwrap();
+    core::mem::forget(gop_scoped); 
+
+    // let frame_buffer = unsafe { gop.read() }.frame_buffer().as_mut_ptr();
+
+    let f: extern "C" fn(gop: *mut GraphicsOutput) -> i32 =
+        unsafe { core::mem::transmute(elf.entry) };
+    system_table.stdout().write_str("exiting!").unwrap();
+
+    // (unsafe{&mut *gop}).blt(BltOp::VideoFill {
+    //     color: BltPixel::new(0x69, 0x69, 0x69),
+    //     dest: (0, 0),
+    //     dims: unsafe{&mut *gop}.current_mode_info().resolution(),
+    // })
+    // .unwrap();
+
+
+    let (_runtime, _map) = system_table.exit_boot_services();
+
+    let i = f(gop);
+
+    Status::ABORTED
+}

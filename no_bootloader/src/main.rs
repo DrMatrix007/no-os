@@ -114,9 +114,9 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
             .memmove((i) as _, data.as_ptr(), data.len());
     }
 
-    let f: extern "C" fn() -> i32 = unsafe { core::mem::transmute(elf.entry+10000) };
+    let f: extern "C" fn() -> i32 = unsafe { core::mem::transmute(elf.entry) };
 
-    // let _ = system_table.exit_boot_services();
+    let _ = system_table.exit_boot_services();
 
     let i = f();
     println!("{}",i as u8 as char);

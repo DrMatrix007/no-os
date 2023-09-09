@@ -8,7 +8,7 @@ release:
 	
 	
 	ld \
-	 -e no_kernel_main \
+	 -e "no_kernel_main" \
 	 no_kernel/target/x86_64-unknown-none/release/libno_kernel.a \
 	 -o esp/no_kernel.elf \
 	 -melf_x86_64

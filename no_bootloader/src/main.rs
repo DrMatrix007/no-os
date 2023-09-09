@@ -5,18 +5,18 @@ extern crate alloc;
 
 use core::{fmt::Write, time::Duration};
 
+use no_kernel_args::FrameData;
 use uefi::{
     cstr16, entry,
     proto::{
-        console::gop::{GraphicsOutput, BltOp, BltPixel},
+        console::gop::GraphicsOutput,
         media::{
             file::{Directory, File, FileAttribute, RegularFile},
             fs::SimpleFileSystem,
         },
-        ProtocolPointer,
     },
     table::{boot::MemoryType, Boot, SystemTable},
-    CStr16, Handle, Status,
+    CStr16, Handle, Identify, Status,
 };
 use uefi_services::println;
 
@@ -119,53 +119,44 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     );
     prretty_print(
         &mut system_table,
-        "3...2...1...",
+        "3...2...1...\n",
         Duration::from_secs_f32(0.05),
     );
 
-    system_table.stdout().clear().unwrap();
-    let gop_scoped = unsafe {
+    let gop_scoped = {
         {
             let handle = system_table
                 .boot_services()
                 .get_handle_for_protocol::<GraphicsOutput>()
                 .unwrap();
-            // system_table.boot_services()
-
             system_table
                 .boot_services()
-                .open_protocol::<GraphicsOutput>(
-                    uefi::table::boot::OpenProtocolParams {
-                        handle,
-                        agent: image_handle,
-                        controller: None,
-                    },
-                    uefi::table::boot::OpenProtocolAttributes::GetProtocol,
-                )
+                .open_protocol_exclusive::<GraphicsOutput>(handle)
                 .unwrap()
-
         }
     };
-    let gop: *mut _  = gop_scoped.get_mut().unwrap();
-    core::mem::forget(gop_scoped); 
+    let mut gop = gop_scoped;
 
-    // let frame_buffer = unsafe { gop.read() }.frame_buffer().as_mut_ptr();
+    let (width, height) = gop.current_mode_info().resolution();
 
-    let f: extern "C" fn(gop: *mut GraphicsOutput) -> i32 =
-        unsafe { core::mem::transmute(elf.entry) };
+    let mut frame = FrameData {
+        ptr: gop.frame_buffer().as_mut_ptr(),
+        width,
+        height,
+        size_per_pixel: gop.frame_buffer().size() / (width * height),
+        pixels_per_scan_line: gop.current_mode_info().stride(),
+    };
+
+    drop(gop);
     system_table.stdout().write_str("exiting!").unwrap();
 
-    // (unsafe{&mut *gop}).blt(BltOp::VideoFill {
-    //     color: BltPixel::new(0x69, 0x69, 0x69),
-    //     dest: (0, 0),
-    //     dims: unsafe{&mut *gop}.current_mode_info().resolution(),
-    // })
-    // .unwrap();
+    println!("{:?}", frame.ptr);
 
+    let f: extern "C" fn(gop: *mut FrameData) -> i32 = unsafe { core::mem::transmute(elf.entry) };
 
     let (_runtime, _map) = system_table.exit_boot_services();
 
-    let i = f(gop);
+    let i = f(&mut frame);
 
-    Status::ABORTED
+    Status::SUCCESS
 }

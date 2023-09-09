@@ -1,9 +1,12 @@
 #![no_std]
 #![no_main]
 
-use core::{ffi::c_void, panic::PanicInfo};
+use core::{
+    ffi::c_void,
+    panic::{self, PanicInfo},
+};
 
-use uefi::proto::console::gop::{BltOp, BltPixel, GraphicsOutput};
+use no_kernel_args::FrameData;
 
 pub mod vga_buffer;
 
@@ -18,18 +21,10 @@ struct A {}
 /// # Safety
 /// bro
 #[export_name = "no_kernel_main"]
-pub unsafe extern "C" fn no_kernel_main(gop: *mut GraphicsOutput) -> i32 {
-    let gop = unsafe { &mut *gop };
-    // *core::ptr::null_mut() = 0;
-
-    gop.blt(BltOp::VideoFill {
-        color: BltPixel::new(0x69, 0x69, 0x69),
-        dest: (0, 0),
-        dims: gop.current_mode_info().resolution(),
-    })
-    .unwrap();
-
-    loop{}
-
+pub unsafe extern "C" fn no_kernel_main(frame: *mut FrameData) -> i32 {
+    let mut frame = unsafe { *frame };
+    core::ptr::write_volatile(frame.get_pixel(0, 0), 0x414141);
+    // panic!();
+    loop {}
     42
 }

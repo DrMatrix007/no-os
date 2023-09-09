@@ -124,7 +124,6 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     );
 
     system_table.stdout().clear().unwrap();
-
     let gop_scoped = unsafe {
         {
             let handle = system_table

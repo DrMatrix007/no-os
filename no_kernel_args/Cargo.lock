@@ -3,12 +3,5 @@
 version = 3
 
 [[package]]
-name = "no_kernel"
-version = "0.1.0"
-dependencies = [
- "no_kernel_args",
-]
-
-[[package]]
 name = "no_kernel_args"
 version = "0.1.0"

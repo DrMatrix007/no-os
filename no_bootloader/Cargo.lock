@@ -42,10 +42,15 @@ name = "no_bootloader"
 version = "0.1.0"
 dependencies = [
  "goblin",
+ "no_kernel_args",
  "uefi",
  "uefi-raw",
  "uefi-services",
 ]
+
+[[package]]
+name = "no_kernel_args"
+version = "0.1.0"
 
 [[package]]
 name = "plain"

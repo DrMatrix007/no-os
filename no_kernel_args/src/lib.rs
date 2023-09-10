@@ -3,6 +3,7 @@
 
 use core::ffi::c_uint;
 #[derive(Debug, Clone, Copy)]
+#[repr(C)]
 pub struct FrameData {
     pub ptr: *mut u8,
     pub width: usize,
@@ -12,7 +13,7 @@ pub struct FrameData {
 }
 
 impl FrameData {
-    pub fn get_pixel(&mut self, x: usize, y: usize) -> &mut c_uint {
-        unsafe { &mut *(self.ptr.add(4 * self.pixels_per_scan_line * y + 4 * x) as *mut c_uint)}
+    pub fn get_pixel(&mut self, x: usize, y: usize) -> *mut u32 {
+        unsafe {self.ptr.add(4 * self.pixels_per_scan_line * y + 4 * x) as *mut u32}
     }
 }

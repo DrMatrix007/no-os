@@ -22,9 +22,13 @@ struct A {}
 /// bro
 #[export_name = "no_kernel_main"]
 pub unsafe extern "C" fn no_kernel_main(frame: *mut FrameData) -> i32 {
-    let mut frame = unsafe { *frame };
-    core::ptr::write_volatile(frame.get_pixel(0, 0), 0x414141);
-    // panic!();
+    let mut frame = unsafe {*frame};
+    for x in 0..100 {
+        for y in 0..100 {
+            core::ptr::write_volatile(frame.get_pixel(x, y), 0xffff);
+        }
+    }
+
     loop {}
     42
 }

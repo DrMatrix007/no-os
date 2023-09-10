@@ -17,3 +17,20 @@ impl FrameData {
         unsafe {self.ptr.add(4 * self.pixels_per_scan_line * y + 4 * x) as *mut u32}
     }
 }
+
+#[derive(Copy, Clone)]
+#[repr(C)]
+pub struct PSF1_FONT {
+    // PSF v1 font struct
+    pub psf1_Header: *mut PSF1_HEADER,
+    pub glyphBuffer: *mut (),
+}
+
+#[derive(Copy, Clone)]
+#[repr(C)]
+pub struct PSF1_HEADER {
+    // PSF v1 header struct
+    pub magic: [u8; 2],
+    pub mode: u8,
+    pub charsize: u8,
+}

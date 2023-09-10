@@ -5,7 +5,7 @@ extern crate alloc;
 
 use core::{fmt::Write, time::Duration};
 
-use no_kernel_args::FrameData;
+use no_kernel_args::{FrameData,PSF1_FONT, PSF1_HEADER};
 use uefi::{
     cstr16, entry,
     proto::{
@@ -19,6 +19,19 @@ use uefi::{
     CStr16, Handle, Identify, Status,
 };
 use uefi_services::println;
+
+
+#[derive(Copy, Clone)]
+#[repr(C)]
+pub struct BootInfo {
+    // BootInfo contains boot data such as GOP ,font , EfiMemory ,etc...
+    pub framebuffer: *mut FrameData,
+    pub psf1_Font: *mut PSF1_FONT,
+    // pub mMap: *mut PageFrameAllocator::EfiMemory::EFI_MEMORY_DESCRIPTOR,
+    pub mMapSize: usize,
+    pub mMapDescSize: usize,
+}
+
 
 fn load_file(
     path: &CStr16,
@@ -180,7 +193,7 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     // println!("{:?}", frame.ptr);
     drop(gop);
 
-    let f: extern "C" fn(gop: *mut FrameData) -> i32 = unsafe { core::mem::transmute(elf.entry) };
+    let f: extern "C" fn(bootInfo: *mut BootInfo) -> i32 = unsafe { core::mem::transmute(elf.entry) };
 
     let (_runtime, _map) = system_table.exit_boot_services();
     
@@ -191,8 +204,28 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
             }
         }
     }
+    let mut font = load_file(cstr16!("some file"), &system_table, None).unwrap();
 
-    let i = f(&mut frame);
+    font.set_position(0xFFFFFFFFFFFFFFFF).unwrap();
+    let size = kernel.get_position().unwrap() as usize;
+    font.set_position(0).unwrap();
+    let data = unsafe {
+        core::slice::from_raw_parts_mut(
+            system_table
+                .boot_services()
+                .allocate_pool(MemoryType::LOADER_DATA, size)
+                .unwrap(),
+            size,
+        )
+    };
+
+    font.read(data).unwrap();
+
+
+    let psf1_f: PSF1_FONT = PSF1_FONT { psf1_Header: (), glyphBuffer: None };
+    let bootInfo = BootInfo{framebuffer: &mut frame, psf1_Font: psf1_f, mMapDescSize: 0, mMapSize: 0};
+
+    let i = f(&mut bootInfo);
 
     Status::SUCCESS
 }

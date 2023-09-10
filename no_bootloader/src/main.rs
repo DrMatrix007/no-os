@@ -9,7 +9,7 @@ use no_kernel_args::FrameData;
 use uefi::{
     cstr16, entry,
     proto::{
-        console::gop::GraphicsOutput,
+        console::gop::{GraphicsOutput, PixelFormat},
         media::{
             file::{Directory, File, FileAttribute, RegularFile},
             fs::SimpleFileSystem,
@@ -123,15 +123,38 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
         Duration::from_secs_f32(0.05),
     );
 
-    let gop_scoped = {
+    let gop_scoped = unsafe {
         {
-            let handle = system_table
+            let handle = *system_table
                 .boot_services()
-                .get_handle_for_protocol::<GraphicsOutput>()
+                .locate_handle_buffer(uefi::table::boot::SearchType::ByProtocol(
+                    &GraphicsOutput::GUID,
+                ))
+                .unwrap()
+                .last()
+                .unwrap();
+            // system_table
+            //     .boot_services()
+            //     .open_protocol_exclusive::<GraphicsOutput>(handle)
+            //     .unwrap()
+            system_table
+                .boot_services()
+                .test_protocol::<GraphicsOutput>(uefi::table::boot::OpenProtocolParams {
+                    handle,
+                    agent: image_handle,
+                    controller: None,
+                })
                 .unwrap();
             system_table
                 .boot_services()
-                .open_protocol_exclusive::<GraphicsOutput>(handle)
+                .open_protocol::<GraphicsOutput>(
+                    uefi::table::boot::OpenProtocolParams {
+                        handle,
+                        agent: image_handle,
+                        controller: None,
+                    },
+                    uefi::table::boot::OpenProtocolAttributes::Exclusive,
+                )
                 .unwrap()
         }
     };
@@ -147,14 +170,27 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
         pixels_per_scan_line: gop.current_mode_info().stride(),
     };
 
+    
+    // println!("{}",gop.modes().any(|f|f.info().pixel_format()==PixelFormat::Rgb));
+    println!("starting!");
+    // for index in 0..20 {
+    // println!("{:?}",&gop.current_mode_info());
+    // println!("{}. {:?} {:?}",index,gop.query_mode(index).unwrap().info().resolution(),gop.query_mode(index).unwrap().info().pixel_format());
+    // }
+    // println!("{:?}", frame.ptr);
     drop(gop);
-    system_table.stdout().write_str("exiting!").unwrap();
-
-    println!("{:?}", frame.ptr);
 
     let f: extern "C" fn(gop: *mut FrameData) -> i32 = unsafe { core::mem::transmute(elf.entry) };
 
     let (_runtime, _map) = system_table.exit_boot_services();
+    
+    for x in 0..frame.width { 
+        for y in 0..frame.height {
+            unsafe {
+                core::ptr::write_volatile(frame.get_pixel(x, y), 0);
+            }
+        }
+    }
 
     let i = f(&mut frame);
 

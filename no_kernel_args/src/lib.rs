@@ -23,7 +23,7 @@ impl FrameData {
 pub struct PSF1_FONT {
     // PSF v1 font struct
     pub psf1_Header: *mut PSF1_HEADER,
-    pub glyphBuffer: *mut (),
+    pub glyphBuffer: *mut usize,
 }
 
 #[derive(Copy, Clone)]

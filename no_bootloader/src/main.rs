@@ -5,13 +5,14 @@ extern crate alloc;
 
 use core::{fmt::Write, time::Duration};
 
+use alloc::vec;
 use no_kernel_args::{FrameData,PSF1_FONT, PSF1_HEADER};
 use uefi::{
     cstr16, entry,
     proto::{
         console::gop::{GraphicsOutput, PixelFormat},
         media::{
-            file::{Directory, File, FileAttribute, RegularFile},
+            file::{Directory, File, FileAttribute, RegularFile, FileInfo},
             fs::SimpleFileSystem,
         },
     },
@@ -195,7 +196,6 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
 
     let f: extern "C" fn(bootInfo: *mut BootInfo) -> i32 = unsafe { core::mem::transmute(elf.entry) };
 
-    let (_runtime, _map) = system_table.exit_boot_services();
     
     for x in 0..frame.width { 
         for y in 0..frame.height {
@@ -204,27 +204,40 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
             }
         }
     }
-    let mut font = load_file(cstr16!("some file"), &system_table, None).unwrap();
-
+    let mut font = load_file(cstr16!("zap-light16.psf"), &system_table, None).unwrap();
+    
+    let mut font_header: PSF1_HEADER = PSF1_HEADER { magic: [0, 0], mode: 0, charsize: 0 };
+    let _ = system_table.boot_services().allocate_pool(MemoryType::LOADER_DATA, 4);
     font.set_position(0xFFFFFFFFFFFFFFFF).unwrap();
     let size = kernel.get_position().unwrap() as usize;
     font.set_position(0).unwrap();
     let data = unsafe {
         core::slice::from_raw_parts_mut(
             system_table
-                .boot_services()
-                .allocate_pool(MemoryType::LOADER_DATA, size)
-                .unwrap(),
+            .boot_services()
+            .allocate_pool(MemoryType::LOADER_DATA, size)
+            .unwrap(),
             size,
         )
     };
-
     font.read(data).unwrap();
-
-
-    let psf1_f: PSF1_FONT = PSF1_FONT { psf1_Header: (), glyphBuffer: None };
-    let bootInfo = BootInfo{framebuffer: &mut frame, psf1_Font: psf1_f, mMapDescSize: 0, mMapSize: 0};
-
+    
+    let mut small_buffer = vec![0u8; 0];
+    let size = font.get_info::<FileInfo>(&mut small_buffer).err().unwrap().data().unwrap();
+    let mut file_info = vec![0u8; size];
+    font.get_info::<FileInfo>(&mut file_info).unwrap();
+    font_header.magic[0] = file_info[0];
+    font_header.magic[1] = file_info[1];
+    font_header.mode = file_info[2];
+    font_header.charsize = file_info[3];
+    
+    
+    
+    let mut glyphBufferSize: usize = (font_header.charsize as usize) * 256;
+    let mut psf1_f: PSF1_FONT = PSF1_FONT { psf1_Header: &mut font_header, glyphBuffer: &mut glyphBufferSize };
+    let mut bootInfo = BootInfo{framebuffer: &mut frame, psf1_Font: &mut psf1_f, mMapDescSize: 0, mMapSize: 0};
+    
+    let (_runtime, _map) = system_table.exit_boot_services();
     let i = f(&mut bootInfo);
 
     Status::SUCCESS

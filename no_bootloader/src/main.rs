@@ -6,33 +6,19 @@ extern crate alloc;
 use core::{fmt::Write, time::Duration};
 
 use alloc::vec;
-use no_kernel_args::{FrameData,PSF1_FONT, PSF1_HEADER};
+use no_kernel_args::{BootInfo, FrameData, PsfFont, PsfHeader};
 use uefi::{
     cstr16, entry,
     proto::{
-        console::gop::{GraphicsOutput, PixelFormat},
+        console::gop::GraphicsOutput,
         media::{
-            file::{Directory, File, FileAttribute, RegularFile, FileInfo},
+            file::{Directory, File, FileAttribute, FileInfo, RegularFile},
             fs::SimpleFileSystem,
         },
     },
     table::{boot::MemoryType, Boot, SystemTable},
     CStr16, Handle, Identify, Status,
 };
-use uefi_services::println;
-
-
-#[derive(Copy, Clone)]
-#[repr(C)]
-pub struct BootInfo {
-    // BootInfo contains boot data such as GOP ,font , EfiMemory ,etc...
-    pub framebuffer: *mut FrameData,
-    pub psf1_Font: *mut PSF1_FONT,
-    // pub mMap: *mut PageFrameAllocator::EfiMemory::EFI_MEMORY_DESCRIPTOR,
-    pub mMapSize: usize,
-    pub mMapDescSize: usize,
-}
-
 
 fn load_file(
     path: &CStr16,
@@ -77,13 +63,97 @@ fn prretty_print(
     }
 }
 
-#[entry]
-fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
-    uefi_services::init(&mut system_table).unwrap();
+fn create_frame_buffer(system_table: &mut SystemTable<Boot>) -> FrameData {
+    let gop_scoped = unsafe {
+        {
+            let handle = *system_table
+                .boot_services()
+                .locate_handle_buffer(uefi::table::boot::SearchType::ByProtocol(
+                    &GraphicsOutput::GUID,
+                ))
+                .unwrap()
+                .last()
+                .unwrap();
+            // system_table
+            //     .boot_services()
+            //     .open_protocol_exclusive::<GraphicsOutput>(handle)
+            //     .unwrap()
+            system_table
+                .boot_services()
+                .test_protocol::<GraphicsOutput>(uefi::table::boot::OpenProtocolParams {
+                    handle,
+                    agent: system_table.boot_services().image_handle(),
+                    controller: None,
+                })
+                .unwrap();
+            system_table
+                .boot_services()
+                .open_protocol::<GraphicsOutput>(
+                    uefi::table::boot::OpenProtocolParams {
+                        handle,
+                        agent: system_table.boot_services().image_handle(),
+                        controller: None,
+                    },
+                    uefi::table::boot::OpenProtocolAttributes::Exclusive,
+                )
+                .unwrap()
+        }
+    };
+    let mut gop = gop_scoped;
 
-    system_table.stdout().clear().unwrap();
+    let (width, height) = gop.current_mode_info().resolution();
 
-    let mut kernel = load_file(cstr16!("no_kernel.elf"), &system_table, None).unwrap();
+    let frame = FrameData {
+        ptr: gop.frame_buffer().as_mut_ptr(),
+        width,
+        height,
+        size_per_pixel: gop.frame_buffer().size() / (width * height),
+        pixels_per_scan_line: gop.current_mode_info().stride(),
+    };
+    frame
+}
+
+fn get_font(system_table: &mut SystemTable<Boot>) -> PsfFont {
+    let mut font = load_file(cstr16!("zap-light16.psf"), system_table, None).unwrap();
+
+    let mut font_header = PsfHeader {
+        magic: [0, 0],
+        mode: 0,
+        charsize: 0,
+    };
+    let _ = system_table
+        .boot_services()
+        .allocate_pool(MemoryType::LOADER_DATA, 4);
+
+    font.set_position(0xFFFFFFFFFFFFFFFF).unwrap();
+
+    let size = font.get_position().unwrap() as _;
+
+    font.set_position(0).unwrap();
+
+    let mut small_buffer = vec![0u8; size];
+    let size = font
+        .get_info::<FileInfo>(&mut small_buffer)
+        .err()
+        .unwrap()
+        .data()
+        .unwrap();
+    let mut file_info = vec![0u8; size];
+    font.get_info::<FileInfo>(&mut file_info).unwrap();
+    font_header.magic[0] = file_info[0];
+    font_header.magic[1] = file_info[1];
+    font_header.mode = file_info[2];
+    font_header.charsize = file_info[3];
+
+    let mut buffer: usize = (font_header.charsize as usize) * 256;
+    PsfFont {
+        header: font_header,
+        buffer: &mut buffer,
+    }
+}
+
+fn get_entry(system_table: &mut SystemTable<Boot>) -> fn(*mut BootInfo) -> i32 {
+    let mut kernel = load_file(cstr16!("no_kernel.elf"), system_table, None).unwrap();
     kernel.set_position(0xFFFFFFFFFFFFFFFF).unwrap();
     let size = kernel.get_position().unwrap() as usize;
     kernel.set_position(0).unwrap();
@@ -126,6 +196,15 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
             .memmove((i) as _, data.as_ptr(), data.len());
     }
 
+    unsafe { core::mem::transmute(elf.entry) }
+}
+
+#[entry]
+fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
+    uefi_services::init(&mut system_table).unwrap();
+
+    system_table.stdout().clear().unwrap();
+
     prretty_print(
         &mut system_table,
         "starting in:\n",
@@ -137,108 +216,35 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
         Duration::from_secs_f32(0.05),
     );
 
-    let gop_scoped = unsafe {
-        {
-            let handle = *system_table
-                .boot_services()
-                .locate_handle_buffer(uefi::table::boot::SearchType::ByProtocol(
-                    &GraphicsOutput::GUID,
-                ))
-                .unwrap()
-                .last()
-                .unwrap();
-            // system_table
-            //     .boot_services()
-            //     .open_protocol_exclusive::<GraphicsOutput>(handle)
-            //     .unwrap()
-            system_table
-                .boot_services()
-                .test_protocol::<GraphicsOutput>(uefi::table::boot::OpenProtocolParams {
-                    handle,
-                    agent: image_handle,
-                    controller: None,
-                })
-                .unwrap();
-            system_table
-                .boot_services()
-                .open_protocol::<GraphicsOutput>(
-                    uefi::table::boot::OpenProtocolParams {
-                        handle,
-                        agent: image_handle,
-                        controller: None,
-                    },
-                    uefi::table::boot::OpenProtocolAttributes::Exclusive,
-                )
-                .unwrap()
-        }
-    };
-    let mut gop = gop_scoped;
-
-    let (width, height) = gop.current_mode_info().resolution();
-
-    let mut frame = FrameData {
-        ptr: gop.frame_buffer().as_mut_ptr(),
-        width,
-        height,
-        size_per_pixel: gop.frame_buffer().size() / (width * height),
-        pixels_per_scan_line: gop.current_mode_info().stride(),
-    };
-
-    
     // println!("{}",gop.modes().any(|f|f.info().pixel_format()==PixelFormat::Rgb));
-    println!("starting!");
     // for index in 0..20 {
     // println!("{:?}",&gop.current_mode_info());
     // println!("{}. {:?} {:?}",index,gop.query_mode(index).unwrap().info().resolution(),gop.query_mode(index).unwrap().info().pixel_format());
     // }
     // println!("{:?}", frame.ptr);
-    drop(gop);
-
-    let f: extern "C" fn(bootInfo: *mut BootInfo) -> i32 = unsafe { core::mem::transmute(elf.entry) };
-
-    
-    for x in 0..frame.width { 
+    let mut frame = create_frame_buffer(&mut system_table);
+    for x in 0..frame.width {
         for y in 0..frame.height {
             unsafe {
                 core::ptr::write_volatile(frame.get_pixel(x, y), 0);
             }
         }
     }
-    let mut font = load_file(cstr16!("zap-light16.psf"), &system_table, None).unwrap();
-    
-    let mut font_header: PSF1_HEADER = PSF1_HEADER { magic: [0, 0], mode: 0, charsize: 0 };
-    let _ = system_table.boot_services().allocate_pool(MemoryType::LOADER_DATA, 4);
-    font.set_position(0xFFFFFFFFFFFFFFFF).unwrap();
-    let size = kernel.get_position().unwrap() as usize;
-    font.set_position(0).unwrap();
-    let data = unsafe {
-        core::slice::from_raw_parts_mut(
-            system_table
-            .boot_services()
-            .allocate_pool(MemoryType::LOADER_DATA, size)
-            .unwrap(),
-            size,
-        )
-    };
-    font.read(data).unwrap();
-    
-    let mut small_buffer = vec![0u8; 0];
-    let size = font.get_info::<FileInfo>(&mut small_buffer).err().unwrap().data().unwrap();
-    let mut file_info = vec![0u8; size];
-    font.get_info::<FileInfo>(&mut file_info).unwrap();
-    font_header.magic[0] = file_info[0];
-    font_header.magic[1] = file_info[1];
-    font_header.mode = file_info[2];
-    font_header.charsize = file_info[3];
-    
-    
-    
-    let mut glyphBufferSize: usize = (font_header.charsize as usize) * 256;
-    let mut psf1_f: PSF1_FONT = PSF1_FONT { psf1_Header: &mut font_header, glyphBuffer: &mut glyphBufferSize };
-    let mut bootInfo = BootInfo{framebuffer: &mut frame, psf1_Font: &mut psf1_f, mMapDescSize: 0, mMapSize: 0};
-    
+
+    let font = get_font(&mut system_table);
+
+    let f = get_entry(&mut system_table);
+
     let (_runtime, _map) = system_table.exit_boot_services();
-    let i = f(&mut bootInfo);
+
+    let mut boot_info = BootInfo {
+        framebuffer: &mut frame,
+        font,
+        map_desc_size: 0,
+        map_size: 0,
+    };
+
+    let _i = f(&mut boot_info);
 
     Status::SUCCESS
 }

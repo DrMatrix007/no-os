@@ -8,23 +8,22 @@
     unused_mut
 )]
 
-use no_kernel_args::{FrameData, PSF1_FONT, PSF1_HEADER};
+use no_kernel_args::{FrameData, PsfFont};
 
 pub struct Point {
     pub X: u32,
     pub Y: u32,
 }
 
-static mut CursorPosition : Point = Point { X: 0u32, Y: 0u32 };
+static mut CursorPosition: Point = Point { X: 0u32, Y: 0u32 };
 static mut framebuffer: *mut FrameData = core::ptr::null_mut(); // framebuffer need not be mutable after BasicRenderer fn Initializes it
-static mut psf1_font: *mut PSF1_FONT = core::ptr::null_mut(); // psf1_font need not be mutable after BasicRenderer fn Initializes it
-static mut colour : u32 = 0xFFFFFFu32;
+static mut psf1_font: *mut PsfFont = core::ptr::null_mut(); // psf1_font need not be mutable after BasicRenderer fn Initializes it
+static mut colour: u32 = 0xFFFFFFu32;
 
-
-pub fn BasicRenderer(FRAMEbuffer: *mut FrameData , PSF1_font: &mut PSF1_FONT) {
+pub fn BasicRenderer(FRAMEbuffer: *mut FrameData, PSF1_font: &mut PsfFont) {
     unsafe {
-         framebuffer = FRAMEbuffer;
-         psf1_font = PSF1_font;
+        framebuffer = FRAMEbuffer;
+        psf1_font = PSF1_font;
     }
 }
 
@@ -48,7 +47,6 @@ pub fn Clear(clear_color: u32) {
         let mut y = 0;
         for _i in 0..(*framebuffer).size_per_pixel {
             // i in framebuffer size so in 1080 x 1920 i will be incremented 2073600 times
-            let clear_color = core::mem::transmute(clear_color); // u32 color value 0x 00 <- R 00 <- G 00 <- B 00 <- alpha (not required so red color with no aplha is 0xFF0000u32)
             PutPix(x, y, clear_color); // calling PutPix passing framebuffer colour and screen cords
             if x < (*framebuffer).pixels_per_scan_line as u32 {
                 // logic for passing on every pixel in screen
@@ -63,14 +61,10 @@ pub fn Clear(clear_color: u32) {
     }
 }
 
-fn PutChar(
-    chr: char,
-    mut xOff: u32,
-    mut yOff: u32,
-) {
+fn PutChar(chr: char, mut xOff: u32, mut yOff: u32) {
     // PutChar prints a character to the screen using the psf v1 font glyphbuffer
     unsafe {
-        let mut fontPtr = (*psf1_font).glyphBuffer as *mut u8; // cast pointer to glyphbuffer
+        let mut fontPtr = (*psf1_font).buffer as *mut u8; // cast pointer to glyphbuffer
         for y in yOff..yOff + 16 {
             // hight of character is 16
             if y < (*framebuffer).height as u32 {
@@ -79,7 +73,7 @@ fn PutChar(
                     // width of character is 8
                     if x < (*framebuffer).width as u32 {
                         // check for cursor_position.X (xOff) not going out of bounds and writing outside framebuffer into unspecified memory
-                        let glyphIndex = (chr as u32) * (*(*psf1_font).psf1_Header).charsize as u32; // cast chr to u32 & dereference psf1_Header charsize and cast as u32
+                        let glyphIndex = (chr as u32) * (*psf1_font).header.charsize as u32; // cast chr to u32 & dereference psf1_Header charsize and cast as u32
                         if *fontPtr.offset(glyphIndex.try_into().unwrap())
                             & (0b10000000 >> (x - xOff))
                             > 0
@@ -101,21 +95,17 @@ fn PutChar(
 }
 
 // should make it take str: impl Into<String>
-pub fn Print(
-    str: &str,
-) {
+pub fn Print(str: &str) {
     unsafe {
         // prints an &str by calling PutChar
         //let str = str.into();
         for c in str.chars() {
             // iterates characters of str pointer
-            if CursorPosition.X < (*framebuffer).width as u32 && CursorPosition.Y < (*framebuffer).height as u32 {
+            if CursorPosition.X < (*framebuffer).width as u32
+                && CursorPosition.Y < (*framebuffer).height as u32
+            {
                 // checks for out of bounds
-                PutChar(
-                    c as char,
-                    CursorPosition.X,
-                    CursorPosition.Y,
-                );
+                PutChar(c, CursorPosition.X, CursorPosition.Y);
             }
             CursorPosition.X += 8;
             if CursorPosition.X + 8 > (*framebuffer).width as u32 {
@@ -129,18 +119,18 @@ pub fn Print(
 
 pub fn Next() {
     unsafe {
-         // my version of newline
+        // my version of newline
         CursorPosition.X = 0; // reset X
         if CursorPosition.Y + 16 < (*framebuffer).height as u32 {
             // checks for Y out of bounds and wraps over
             CursorPosition.Y += 16;
         } else {
-            return; // scroll instead of wrapover when shell is implemented
+            // scroll instead of wrapover when shell is implemented
         }
     }
 }
 
-pub fn Colour(color : u32) {
+pub fn Colour(color: u32) {
     unsafe {
         colour = color;
     }

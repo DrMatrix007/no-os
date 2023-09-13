@@ -1,13 +1,16 @@
 #![no_main]
 #![no_std]
 
+use core::ffi::c_void;
+
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct FrameData {
-    pub ptr: *mut u8,
+    pub ptr: *mut c_void,
     pub width: usize,
     pub height: usize,
     pub size_per_pixel: usize,
+    pub size: usize,
     pub pixels_per_scan_line: usize,
 }
 

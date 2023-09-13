@@ -132,6 +132,7 @@ fn get_font(system_table: &mut SystemTable<Boot>) -> PsfFont {
     font.set_position(0).unwrap();
 
     let mut small_buffer = vec![0u8; size];
+
     let size = font
         .get_info::<FileInfo>(&mut small_buffer)
         .err()

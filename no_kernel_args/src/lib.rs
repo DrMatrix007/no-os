@@ -47,3 +47,19 @@ pub struct BootInfo {
     pub map_size: usize,
     pub map_desc_size: usize,
 }
+
+
+#[derive(Copy, Clone)]
+#[repr(C)]
+pub struct PsiHeader {
+    height: usize,
+    width: usize,
+}
+
+
+#[derive(Copy, Clone)]
+#[repr(C)]
+pub struct PsiImage {
+    image_buffer: *mut u32,
+    header: PsiHeader,
+}

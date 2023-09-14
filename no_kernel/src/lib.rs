@@ -26,7 +26,8 @@ pub unsafe extern "C" fn no_kernel_main(boot_info: *mut BootInfo) -> i32 {
             core::ptr::write_volatile(frame.get_pixel(x, y), 0xffff);
         }
     }
-
+    
     #[allow(clippy::empty_loop)]
     loop {}
+    42
 }

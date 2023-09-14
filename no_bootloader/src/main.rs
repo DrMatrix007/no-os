@@ -19,6 +19,7 @@ use uefi::{
     table::{boot::MemoryType, Boot, SystemTable},
     CStr16, Handle, Identify, Status,
 };
+use uefi_services::println;
 
 fn load_file(
     path: &CStr16,
@@ -104,12 +105,19 @@ fn create_frame_buffer(system_table: &mut SystemTable<Boot>) -> FrameData {
     let (width, height) = gop.current_mode_info().resolution();
 
     let frame = FrameData {
-        ptr: gop.frame_buffer().as_mut_ptr(),
+        ptr: gop.frame_buffer().as_mut_ptr() as _,
         width,
         height,
+        size: gop.frame_buffer().size(),
         size_per_pixel: gop.frame_buffer().size() / (width * height),
         pixels_per_scan_line: gop.current_mode_info().stride(),
     };
+    // unsafe {
+    //     system_table
+    //         .boot_services()
+    //         .set_mem(frame.ptr, gop.frame_buffer().size(), 0);
+    // }
+
     frame
 }
 
@@ -125,20 +133,7 @@ fn get_font(system_table: &mut SystemTable<Boot>) -> PsfFont {
         .boot_services()
         .allocate_pool(MemoryType::LOADER_DATA, 4);
 
-    font.set_position(0xFFFFFFFFFFFFFFFF).unwrap();
-
-    let size = font.get_position().unwrap() as _;
-
-    font.set_position(0).unwrap();
-
-    let mut small_buffer = vec![0u8; size];
-
-    // let size = font
-    //     .get_info::<FileInfo>(&mut small_buffer)
-    //     .err()
-    //     .unwrap()
-    //     .data()
-    //     .unwrap();
+    let mut small_buffer = vec![0u8; 0];
     let size = font
         .get_info::<FileInfo>(&mut small_buffer)
         .unwrap().file_size() as usize;
@@ -203,8 +198,15 @@ fn get_entry(system_table: &mut SystemTable<Boot>) -> fn(*mut BootInfo) -> i32 {
             .boot_services()
             .memmove((i) as _, data.as_ptr(), data.len());
     }
+    let entry = elf.entry;
+    drop(elf);
 
-    unsafe { core::mem::transmute(elf.entry) }
+    system_table
+        .boot_services()
+        .free_pool(data.as_mut_ptr())
+        .unwrap();
+
+    unsafe { core::mem::transmute(entry) }
 }
 
 #[entry]
@@ -231,19 +233,33 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     // }
     // println!("{:?}", frame.ptr);
     let mut frame = create_frame_buffer(&mut system_table);
-    for x in 0..frame.width {
-        for y in 0..frame.height {
-            unsafe {
-                core::ptr::write_volatile(frame.get_pixel(x, y), 0);
-            }
-        }
-    }
 
     let font = get_font(&mut system_table);
 
     let f = get_entry(&mut system_table);
 
-    let (_runtime, _map) = system_table.exit_boot_services();
+    // for x in 0..frame.width {
+    //     for y in 0..frame.height {
+    //         unsafe {
+    //             *frame.get_pixel(x, y) = 0;
+    //             // print!("{},",*)
+    //         }
+    //     }
+    // }
+    println!(
+        "{} {} {} {}",
+        frame.width,
+        frame.height,
+        frame.height * frame.width * 4,
+        frame.size
+    );
+    unsafe {
+        system_table
+            .boot_services()
+            .set_mem(frame.ptr as _, frame.size, 0);
+    }
+    println!("{}",(0..frame.size).all(|x|unsafe{(frame.ptr.add(x) as *const u8).read()==0}));
+    // let (_runtime, _map) = system_table.exit_boot_services();
 
     let mut boot_info = BootInfo {
         framebuffer: &mut frame,

@@ -20,13 +20,21 @@ struct A {}
 pub unsafe extern "C" fn no_kernel_main(boot_info: *mut BootInfo) -> i32 {
     let mut frame = unsafe { *(*boot_info).framebuffer };
 
-    for x in 0..100 {
-        for y in 0..100 {
-            core::ptr::write_volatile(frame.get_pixel(x, y), 0x00ffff00);
+
+    for x in 0..frame.width {
+        for y in 0..frame.height {
+            unsafe {
+                core::ptr::write_volatile(frame.get_pixel(x, y), 0x0);
+            }
+        }
+    }
+
+    for x in 0..1000 {
+        for y in 0..1000 {
+            core::ptr::write_volatile(frame.get_pixel(x, y), 0xff0000);
         }
     }
     
     #[allow(clippy::empty_loop)]
     loop {}
-    42
 }

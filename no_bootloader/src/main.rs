@@ -245,14 +245,35 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     //         }
     //     }
     // }
+<<<<<<< HEAD
     println!("{:?}", frame);
+=======
+    println!(
+        "{} {} {} {}",
+        frame.width,
+        frame.height,
+        frame.height * frame.width * 4,
+        frame.size
+    );
+>>>>>>> 4d119c3 (something)
     // unsafe {
     //     system_table
     //         .boot_services()
     //         .set_mem(frame.ptr as _, frame.size, 0);
     // }
+<<<<<<< HEAD
     // println!("{}",(0..frame.size).all(|x|unsafe{(frame.ptr.add(x) as *const u8).read()}==0));
     // let (_runtime, _mazp) = system_table.exit_boot_services();
+=======
+
+
+    
+    
+    // println!("{}",(0..frame.size).all(|x|unsafe{(frame.ptr.add(x) as *const u8).read()}==0));
+
+
+    let (_runtime, _map) = system_table.exit_boot_services();
+>>>>>>> 4d119c3 (something)
 
     let mut boot_info = BootInfo {
         framebuffer: &mut frame,

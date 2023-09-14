@@ -245,7 +245,6 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     println!("{:?}", frame);
     
     let (_runtime, _map) = system_table.exit_boot_services();
-
     let mut boot_info = BootInfo {
         framebuffer: &mut frame,
         font,

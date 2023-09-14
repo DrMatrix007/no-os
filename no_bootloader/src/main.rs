@@ -237,33 +237,13 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
 
     let f = get_entry(&mut system_table);
 
-    // for x in 0..frame.width {
-    //     for y in 0..frame.height {
-    //         unsafe {
-    //             *frame.get_pixel(x, y) = 0;
-    //             // print!("{},",*)
-    //         }
-    //     }
-    // }
-    println!(
-        "{} {} {} {}",
-        frame.width,
-        frame.height,
-        frame.height * frame.width * 4,
-        frame.size
-    );
-    // unsafe {
-    //     system_table
-    //         .boot_services()
-    //         .set_mem(frame.ptr as _, frame.size, 0);
-    // }
 
-
+    //this is the most important print on earth
+    // DO NOT TOUCH THIS LINE!!!!!
+    // NOTHING WILL WORK
+    // THE WORLD WILL BRAKE (and this os)
+    println!("{:?}", frame);
     
-    
-    // println!("{}",(0..frame.size).all(|x|unsafe{(frame.ptr.add(x) as *const u8).read()}==0));
-
-
     let (_runtime, _map) = system_table.exit_boot_services();
 
     let mut boot_info = BootInfo {

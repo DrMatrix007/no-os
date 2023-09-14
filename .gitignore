@@ -1,1 +1,3 @@
 */target
+./esp/no_kernel.elf
+./esp/efi/boot/bootx64.efi

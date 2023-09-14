@@ -133,18 +133,25 @@ fn get_font(system_table: &mut SystemTable<Boot>) -> PsfFont {
 
     let mut small_buffer = vec![0u8; size];
 
+    // let size = font
+    //     .get_info::<FileInfo>(&mut small_buffer)
+    //     .err()
+    //     .unwrap()
+    //     .data()
+    //     .unwrap();
     let size = font
         .get_info::<FileInfo>(&mut small_buffer)
-        .err()
-        .unwrap()
-        .data()
-        .unwrap();
+        .unwrap().file_size() as usize;
     let mut file_info = vec![0u8; size];
     font.get_info::<FileInfo>(&mut file_info).unwrap();
     font_header.magic[0] = file_info[0];
     font_header.magic[1] = file_info[1];
     font_header.mode = file_info[2];
     font_header.charsize = file_info[3];
+
+    if (font_header.magic[0] != 0x36 || font_header.magic[1] != 0x04) {
+        prretty_print(system_table, "fail", Duration::from_millis(0));
+    }
 
     let mut buffer: usize = (font_header.charsize as usize) * 256;
     PsfFont {
@@ -240,7 +247,7 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
 
     let mut boot_info = BootInfo {
         framebuffer: &mut frame,
-        font,
+        font: font,
         map_desc_size: 0,
         map_size: 0,
     };

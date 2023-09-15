@@ -237,13 +237,12 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
 
     let f = get_entry(&mut system_table);
 
-
     //this is the most important print on earth
     // DO NOT TOUCH THIS LINE!!!!!
     // NOTHING WILL WORK
     // THE WORLD WILL BRAKE (and this os)
-    println!("{:?}", frame);
-    
+    println!("{:?}",frame);
+
     let (_runtime, _map) = system_table.exit_boot_services();
     let mut boot_info = BootInfo {
         framebuffer: &mut frame,

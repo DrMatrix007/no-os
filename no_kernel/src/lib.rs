@@ -3,10 +3,10 @@
 
 use core::panic::PanicInfo;
 
+mod renderer;
 
-use basicRenderer::Writer;
+use renderer::{Color, Writer};
 use no_kernel_args::BootInfo;
-mod basicRenderer;
 
 #[panic_handler]
 fn panic_handler(_: &PanicInfo) -> ! {
@@ -20,25 +20,21 @@ struct A {}
 /// bro
 #[export_name = "no_kernel_main"]
 pub unsafe extern "C" fn no_kernel_main(boot_info: *mut BootInfo) -> i32 {
-    let mut frame = unsafe { *(*boot_info).framebuffer };
+    let frame = unsafe { *(*boot_info).framebuffer };
+    let mut w = Writer::new(&frame);
 
-    // basicRenderer::BasicRenderer(unsafe {&mut *(*boot_info).framebuffer});
-    let mut w = Writer::new();
-    w.Init(unsafe {&mut *(*boot_info).framebuffer});
-    for x in 0..frame.width {
-        for y in 0..frame.height {
-            core::ptr::write_volatile(frame.get_pixel(x, y), 0x0);
-        }
-    }
-    w.Print(r"Hello world!");
-    // basicRenderer::Next();
-    // basicRenderer::Print(r"NO-OS");
 
-    // for x in 0..1000 {
-    //     for y in 0..1000 {
-    //         core::ptr::write_volatile(frame.get_pixel(x, y), 0xff0000);
-    //     }
-    // }
+    w.clear(Color::BLACK);
+    w.color(Color::WHITE);
+    w.println("Hello world!");
+
+    w.color(Color::RED);
+    w.println("Welcome to NO_OS!");
+
+    w.color(Color::GREEN);
+    w.println("Written By Nadav and Ofri");
+
+
     #[allow(clippy::empty_loop)]
     loop {}
 }

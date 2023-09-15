@@ -6,10 +6,23 @@ release:
 
 	cp no_bootloader/target/x86_64-unknown-uefi/release/no_bootloader.efi esp/efi/boot/bootx64.efi
 	
-	
 	ld \
 	 -e "no_kernel_main" \
 	 no_kernel/target/x86_64-unknown-none/release/libno_kernel.a \
+	 -o esp/no_kernel.elf \
+	 -melf_x86_64
+	
+debug:
+	cd no_bootloader; \
+		cargo build;
+	cd no_kernel; \
+		cargo build;
+
+	cp no_bootloader/target/x86_64-unknown-uefi/debug/no_bootloader.efi esp/efi/boot/bootx64.efi
+	
+	ld \
+	 -e "no_kernel_main" \
+	 no_kernel/target/x86_64-unknown-none/debug/libno_kernel.a \
 	 -o esp/no_kernel.elf \
 	 -melf_x86_64
 	

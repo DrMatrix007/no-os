@@ -3,6 +3,8 @@
 
 use core::panic::PanicInfo;
 
+
+use basicRenderer::Writer;
 use no_kernel_args::BootInfo;
 mod basicRenderer;
 
@@ -20,19 +22,23 @@ struct A {}
 pub unsafe extern "C" fn no_kernel_main(boot_info: *mut BootInfo) -> i32 {
     let mut frame = unsafe { *(*boot_info).framebuffer };
 
-    // basicRenderer::BasicRenderer(unsafe {&mut *(*boot_info).framebuffer}, unsafe { &mut (*boot_info).font });
-    // basicRenderer::Print(r"hello");
+    // basicRenderer::BasicRenderer(unsafe {&mut *(*boot_info).framebuffer});
+    let mut w = Writer::new();
+    w.Init(unsafe {&mut *(*boot_info).framebuffer});
     for x in 0..frame.width {
         for y in 0..frame.height {
             core::ptr::write_volatile(frame.get_pixel(x, y), 0x0);
         }
     }
+    w.Print(r"Hello world!");
+    // basicRenderer::Next();
+    // basicRenderer::Print(r"NO-OS");
 
-    for x in 0..1000 {
-        for y in 0..1000 {
-            core::ptr::write_volatile(frame.get_pixel(x, y), 0xff0000);
-        }
-    }
+    // for x in 0..1000 {
+    //     for y in 0..1000 {
+    //         core::ptr::write_volatile(frame.get_pixel(x, y), 0xff0000);
+    //     }
+    // }
     #[allow(clippy::empty_loop)]
     loop {}
 }

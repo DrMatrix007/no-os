@@ -3,7 +3,7 @@
 
 extern crate alloc;
 
-use core::{fmt::Write, time::Duration};
+use core::{fmt::Write, panic, time::Duration};
 
 use alloc::vec;
 use no_kernel_args::{BootInfo, FrameData, PsfFont, PsfHeader};
@@ -19,6 +19,7 @@ use uefi::{
     table::{boot::MemoryType, Boot, SystemTable},
     CStr16, Handle, Identify, Status,
 };
+use uefi_raw::table::system;
 use uefi_services::println;
 
 fn load_file(
@@ -89,14 +90,7 @@ fn create_frame_buffer(system_table: &mut SystemTable<Boot>) -> FrameData {
                 .unwrap();
             system_table
                 .boot_services()
-                .open_protocol::<GraphicsOutput>(
-                    uefi::table::boot::OpenProtocolParams {
-                        handle,
-                        agent: system_table.boot_services().image_handle(),
-                        controller: None,
-                    },
-                    uefi::table::boot::OpenProtocolAttributes::Exclusive,
-                )
+                .open_protocol_exclusive::<GraphicsOutput>(handle)
                 .unwrap()
         }
     };
@@ -104,7 +98,7 @@ fn create_frame_buffer(system_table: &mut SystemTable<Boot>) -> FrameData {
 
     let (width, height) = gop.current_mode_info().resolution();
 
-    let frame = FrameData {
+    let mut frame = FrameData {
         ptr: gop.frame_buffer().as_mut_ptr() as _,
         width,
         height,
@@ -154,7 +148,7 @@ fn get_font(system_table: &mut SystemTable<Boot>) -> PsfFont {
     }
 }
 
-fn get_entry(system_table: &mut SystemTable<Boot>) -> fn(*mut BootInfo) -> i32 {
+fn get_entry(system_table: &mut SystemTable<Boot>) -> unsafe extern "C" fn(*mut BootInfo) -> i32 {
     let mut kernel = load_file(cstr16!("no_kernel.elf"), system_table, None).unwrap();
     kernel.set_position(0xFFFFFFFFFFFFFFFF).unwrap();
     let size = kernel.get_position().unwrap() as usize;
@@ -204,7 +198,7 @@ fn get_entry(system_table: &mut SystemTable<Boot>) -> fn(*mut BootInfo) -> i32 {
         .boot_services()
         .free_pool(data.as_mut_ptr())
         .unwrap();
-
+    println!("{}", entry);
     unsafe { core::mem::transmute(entry) }
 }
 
@@ -217,12 +211,12 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     prretty_print(
         &mut system_table,
         "starting in:\n",
-        Duration::from_secs_f32(0.05),
+        Duration::from_secs_f32(0.00),
     );
     prretty_print(
         &mut system_table,
         "3...2...1...\n",
-        Duration::from_secs_f32(0.05),
+        Duration::from_secs_f32(0.00),
     );
 
     // println!("{}",gop.modes().any(|f|f.info().pixel_format()==PixelFormat::Rgb));
@@ -241,17 +235,30 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     // DO NOT TOUCH THIS LINE!!!!!
     // NOTHING WILL WORK
     // THE WORLD WILL BRAKE (and this os)
-    println!("{:?}",frame);
+    println!("{:?}", frame);
 
-    let (_runtime, _map) = system_table.exit_boot_services();
-    let mut boot_info = BootInfo {
-        framebuffer: &mut frame,
+    // println!("{:?}", f);
+    // system_table.stdout().clear().unwrap();
+
+    let boot_info = BootInfo {
+        framebuffer: frame,
         font,
         map_desc_size: 0,
         map_size: 0,
     };
+    let boot_info_ptr = system_table
+        .boot_services()
+        .allocate_pages(uefi::table::boot::AllocateType::AnyPages,MemoryType::LOADER_DATA, (core::mem::size_of_val(&boot_info)+0x1000-1)/0x1000)
+        .unwrap() as *mut BootInfo;
 
-    let _i = f(&mut boot_info);
+    unsafe { *boot_info_ptr = boot_info };
 
+    let (_runtime, mut map) = system_table.exit_boot_services();
+
+    // map.sort();
+
+
+    let res = unsafe { f(boot_info_ptr) };
+    println!("reslt: {}", res);
     Status::SUCCESS
 }

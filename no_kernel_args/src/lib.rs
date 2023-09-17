@@ -41,7 +41,7 @@ pub struct PsfHeader {
 #[repr(C)]
 pub struct BootInfo {
     // BootInfo contains boot data such as GOP ,font , EfiMemory ,etc...
-    pub framebuffer: *mut FrameData,
+    pub framebuffer: FrameData,
     pub font: PsfFont,
     // pub mMap: *mut PageFrameAllocator::EfiMemory::EFI_MEMORY_DESCRIPTOR,
     pub map_size: usize,

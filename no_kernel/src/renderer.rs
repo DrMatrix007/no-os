@@ -147,11 +147,11 @@ static LETTERS: [[u8; 8]; 128] = [
 ];
 
 impl Writer {
-    pub fn new(frame: &FrameData) -> Self {
+    pub fn new(frame: FrameData) -> Self {
         Writer {
             cursor: Point { x: 1, y: 0 },
-            frame: *frame,
-            color: 0xFFFFFF.into(),
+            frame,
+            color: 0xFFFFFF00.into(),
         }
     }
 
@@ -159,6 +159,9 @@ impl Writer {
         // PutPix Function pass framebuffer colour and screen cords
         unsafe {
             core::ptr::write_volatile(self.frame.get_pixel(x, y), color.color);
+            // core::ptr::write_unaligned(self.frame.get_pixel(x, y), color.color);
+            // core::ptr::write_unaligned(dst, src)
+            // *self.frame.get_pixel(x, y) = color.color;
         }
     }
 
@@ -190,7 +193,7 @@ impl Writer {
                 // check for cursor_position.Y (yOff) not going out of bounds and writing outside framebuffer into unspecified memory
                 let mut mask: u8 = 0x01;
                 for x in 0..8 {
-                    if LETTERS[chr as usize][(y / 2)] & mask != 0 {
+                    if LETTERS[chr as usize][y / 2] & mask != 0 {
                         self.write_pixel(x_off + x, y_off + y, self.color);
                     }
                     mask <<= 1;
@@ -217,7 +220,7 @@ impl Writer {
             }
         }
     }
-    pub fn println(&mut self,str:&str) {
+    pub fn println(&mut self, str: &str) {
         self.print(str);
         self.next_line();
     }
@@ -249,6 +252,7 @@ impl From<u32> for Color {
     }
 }
 
+#[allow(dead_code)]
 impl Color {
     pub const BLACK: Color = Color { color: 0 };
     pub const WHITE: Color = Color { color: 0xFFFFFFu32 };

@@ -23,15 +23,14 @@ pub unsafe extern "C" fn no_kernel_main(boot_info: *mut BootInfo) -> i32 {
     let frame = unsafe { *boot_info }.framebuffer;
     let mut w = Writer::new(frame);
 
-    w.clear(Color::CYAN);
-    w.color(Color::WHITE);
+    w.clear(Color::BLACK);
+    w.color(Color::BLACK);
    
     w.println("Hello world!");
-    w.color(Color::RED);
+    w.color(Color::BLACK);
     w.println("Welcome to NO_OS!");
 
-    w.color(Color::GREEN);
+    w.color(Color::BLACK);
     w.println("Written By Nadav and Ofri");
-    loop{}
     42
 }

@@ -3,7 +3,7 @@
 
 extern crate alloc;
 
-use core::{fmt::Write, panic, time::Duration};
+use core::{fmt::Write, time::Duration};
 
 use alloc::vec;
 use no_kernel_args::{BootInfo, FrameData, PsfFont, PsfHeader};
@@ -19,7 +19,6 @@ use uefi::{
     table::{boot::MemoryType, Boot, SystemTable},
     CStr16, Handle, Identify, Status,
 };
-use uefi_raw::table::system;
 use uefi_services::println;
 
 fn load_file(
@@ -66,7 +65,7 @@ fn prretty_print(
 }
 
 fn create_frame_buffer(system_table: &mut SystemTable<Boot>) -> FrameData {
-    let gop_scoped = unsafe {
+    let gop_scoped = {
         {
             let handle = *system_table
                 .boot_services()
@@ -96,9 +95,14 @@ fn create_frame_buffer(system_table: &mut SystemTable<Boot>) -> FrameData {
     };
     let mut gop = gop_scoped;
 
+
+    let mode = gop.query_mode(0).unwrap();
+    gop.set_mode(&mode).unwrap();
+
     let (width, height) = gop.current_mode_info().resolution();
 
-    let mut frame = FrameData {
+
+    let frame = FrameData {
         ptr: gop.frame_buffer().as_mut_ptr() as _,
         width,
         height,
@@ -111,7 +115,7 @@ fn create_frame_buffer(system_table: &mut SystemTable<Boot>) -> FrameData {
     //         .boot_services()
     //         .set_mem(frame.ptr, gop.frame_buffer().size(), 0);
     // }
-
+    // core::mem::forget(gop);
     frame
 }
 
@@ -225,7 +229,7 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     // println!("{}. {:?} {:?}",index,gop.query_mode(index).unwrap().info().resolution(),gop.query_mode(index).unwrap().info().pixel_format());
     // }
     // println!("{:?}", frame.ptr);
-    let mut frame = create_frame_buffer(&mut system_table);
+    let frame = create_frame_buffer(&mut system_table);
 
     let font = get_font(&mut system_table);
 
@@ -248,17 +252,17 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     };
     let boot_info_ptr = system_table
         .boot_services()
-        .allocate_pages(uefi::table::boot::AllocateType::AnyPages,MemoryType::LOADER_DATA, (core::mem::size_of_val(&boot_info)+0x1000-1)/0x1000)
+        .allocate_pool(MemoryType::LOADER_DATA, core::mem::size_of_val(&boot_info))
         .unwrap() as *mut BootInfo;
 
     unsafe { *boot_info_ptr = boot_info };
-
-    let (_runtime, mut map) = system_table.exit_boot_services();
+    println!("{:?}", unsafe { *boot_info_ptr });
+    system_table.stdout().clear().unwrap();
+    let (_runtime, _map) = system_table.exit_boot_services();
 
     // map.sort();
 
-
     let res = unsafe { f(boot_info_ptr) };
-    println!("reslt: {}", res);
+
     Status::SUCCESS
 }

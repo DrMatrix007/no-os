@@ -20,7 +20,7 @@ impl FrameData {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 #[repr(C)]
 pub struct PsfFont {
     // PSF v1 font struct
@@ -28,7 +28,7 @@ pub struct PsfFont {
     pub buffer: *mut usize,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone,Debug)]
 #[repr(C)]
 pub struct PsfHeader {
     // PSF v1 header struct
@@ -37,7 +37,7 @@ pub struct PsfHeader {
     pub charsize: u8,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 #[repr(C)]
 pub struct BootInfo {
     // BootInfo contains boot data such as GOP ,font , EfiMemory ,etc...
@@ -48,14 +48,12 @@ pub struct BootInfo {
     pub map_desc_size: usize,
 }
 
-
 #[derive(Copy, Clone)]
 #[repr(C)]
 pub struct PsiHeader {
     height: usize,
     width: usize,
 }
-
 
 #[derive(Copy, Clone)]
 #[repr(C)]

@@ -13,7 +13,7 @@ goblin = { version = "0.7.1", features = [
     "archive",
     "endian_fd",
 ], default-features = false }
-uefi = "0.24.0"
-uefi-services = "0.21.0"
+uefi = "*"
+uefi-services = "*"
 uefi-raw = "*"
 no_kernel_args = { path = "../no_kernel_args" }

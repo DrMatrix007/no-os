@@ -501,11 +501,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f232d6ef707e1956a43342693d2a31e72989554d58299d7a88738cc95b0d35c"
 
 [[package]]
-name = "no-os"
+name = "no_kernel"
+version = "0.1.0"
+dependencies = [
+ "bootloader_api",
+]
+
+[[package]]
+name = "no_os"
 version = "0.1.0"
 dependencies = [
  "bootloader",
- "bootloader_api",
+ "no_kernel",
 ]
 
 [[package]]

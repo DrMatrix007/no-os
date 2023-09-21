@@ -2,17 +2,16 @@
 name = "no_kernel"
 version = "0.1.0"
 edition = "2021"
-
-[lib]
-name = "no_kernel"
-crate-type = ["staticlib"]
+authors= [""]
 
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+# [[bin]]
+# name="no_kernel"
+# crate-type = ["staticlib"]
+
+
 [dependencies]
-no_kernel_args = {path = "../no_kernel_args"}
-spin = "0.5.2"
-
-[dependencies.lazy_static]
-version = "1.0"
-features = ["spin_no_std"]
+# bootloader = "*"
+# anyhow = { version = "1.0.75", default-features = false,features = []}
+bootloader_api = "0.11.4"

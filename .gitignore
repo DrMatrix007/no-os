@@ -1,3 +1,9 @@
+/target
+
 */target
-./esp/no_kernel.elf
-./esp/efi/boot/bootx64.efi
+
+# Added by cargo
+#
+# already existing elements were commented out
+
+#/target
